@@ -275,7 +275,7 @@ static void renderGame(App& app, Graphics& g, float W, float H, float alpha) {
                 wchar_t wb[16]; swprintf(wb, 16, L"%ld", wgt);
                 float cellCx = numX + (i + 0.5f) * digitW;
                 RectF wr(cellCx - digitW * 1.6f, lineY - 20, digitW * 3.2f, 18);
-                drawText(g, wb, wr, &pwFont, ca(COL_MUTED));
+                drawText(g, wb, wr, F->power, ca(COL_MUTED));
             }
         }
     }
