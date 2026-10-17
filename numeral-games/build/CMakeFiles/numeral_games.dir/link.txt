@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG -static-libstdc++ -static-libgcc CMakeFiles/numeral_games.dir/src/main.cpp.o CMakeFiles/numeral_games.dir/src/game.cpp.o CMakeFiles/numeral_games.dir/src/platform_linux.cpp.o CMakeFiles/numeral_games.dir/src/platform_windows.cpp.o -o numeral_games 
