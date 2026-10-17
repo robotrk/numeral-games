@@ -1,9 +1,4 @@
-build/
-release/
 *.o
 *.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
+numeral-games/src-gui/gui_test
+*.log

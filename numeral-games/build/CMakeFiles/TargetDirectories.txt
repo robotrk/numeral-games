@@ -1,0 +1,7 @@
+/workspace/numeral-games/build/CMakeFiles/numeral_games.dir
+/workspace/numeral-games/build/CMakeFiles/edit_cache.dir
+/workspace/numeral-games/build/CMakeFiles/rebuild_cache.dir
+/workspace/numeral-games/build/CMakeFiles/list_install_components.dir
+/workspace/numeral-games/build/CMakeFiles/install.dir
+/workspace/numeral-games/build/CMakeFiles/install/local.dir
+/workspace/numeral-games/build/CMakeFiles/install/strip.dir

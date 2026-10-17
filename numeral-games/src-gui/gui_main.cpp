@@ -1,0 +1,599 @@
+// gui_main.cpp — неконсольная (GUI) версия игр по системам счисления на GTK3 / C++17
+// Порт логики веб-версии: 6 режимов, уровни, таймеры, поле ячеек, кнопки.
+#include <gtk/gtk.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <functional>
+#include <random>
+#include <string>
+#include <utility>
+#include <vector>
+
+// ===================== КОНФИГУРАЦИЯ ИГР =====================
+struct GameConfig {
+    int id;
+    int fromBase, toBase, inputBase;
+    int maxDigits, levelCount;
+    double startTimer, timerStep;
+    const char* title;      // подпись кнопки в меню
+    const char* desc;       // описание на игровом экране
+    std::function<std::pair<int,int>(int)> numRange;
+    bool showPowers;        // показывать степени двойки над ячейками (игра «10 → 2»)
+};
+
+static std::vector<GameConfig> makeGames() {
+    std::vector<GameConfig> g;
+    g.push_back({1, 8, 2, 2, 9, 10, 31, 2, "8 \xe2\x86\x92 2",
+        "Нужно перевести число из 8 С.С. в 2 С.С.", // Нужно перевести число из 8 С.С. в 2 С.С.
+        [](int){ return std::make_pair(64, 511); }, false});
+    g.push_back({2, 16, 2, 2, 12, 10, 35, 1, "16 \xe2\x86\x92 2",
+        "Нужно перевести число из 16 С.С. в 2 С.С.",
+        [](int){ return std::make_pair(256, 4095); }, false});
+    g.push_back({3, 2, 8, 8, 3, 10, 35, 2, "2 \xe2\x86\x92 8",
+        "Нужно перевести число из 2 С.С. в 8 С.С.",
+        [](int lev){ return lev >= 7 ? std::make_pair(513, 4095) : std::make_pair(64, 511); }, false});
+    g.push_back({4, 2, 16, 16, 3, 10, 35, 2, "2 \xe2\x86\x92 16",
+        "Нужно перевести число из 2 С.С. в 16 С.С.",
+        [](int lev){ return lev >= 7 ? std::make_pair(4097, 65534) : std::make_pair(256, 4095); }, false});
+    g.push_back({5, 10, 2, 2, 8, 13, 31, 1, "10 \xe2\x86\x92 2",
+        "Нужно перевести число из 10 С.С. в 2 С.С.",
+        [](int){ return std::make_pair(1, 255); }, true});
+    g.push_back({6, 2, 10, 10, 2, 10, 35, 2, "2 \xe2\x86\x92 10",
+        "Нужно перевести число из 2 С.С. в 10 С.С.",
+        [](int lev){ return lev == 1 ? std::make_pair(1, 9) : std::make_pair(10, 99); }, false});
+    return g;
+}
+
+// ===================== УТИЛИТЫ =====================
+static long rndLong(long a, long b) {            // [a, b] включительно
+    static std::mt19937_64 rng{std::random_device{}()};
+    std::uniform_int_distribution<long> d(a, b);
+    return d(rng);
+}
+
+static std::string toBase(long v, int base) {
+    if (v == 0) return "0";
+    const char* digits = "0123456789ABCDEF";
+    std::string s;
+    while (v > 0) { s.insert(s.begin(), digits[v % base]); v /= base; }
+    return s;
+}
+
+static std::string padStart(const std::string& s, size_t n) {
+    if (s.size() >= n) return s;
+    return std::string(n - s.size(), '0') + s;
+}
+
+static std::string groupBits(const std::string& bin, int size) {
+    std::string out;
+    int cnt = 0;
+    for (int i = (int)bin.size() - 1; i >= 0; --i) {
+        out.insert(out.begin(), bin[i]);
+        if (++cnt % size == 0 && i > 0) out.insert(out.begin(), ' ');
+    }
+    return out;
+}
+
+static int digitValue(const std::string& t) {    // "A" -> 10, "" -> -1
+    if (t.empty()) return -1;
+    char c = t[0];
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    return -1;
+}
+
+// ===================== СОСТОЯНИЕ ПРИЛОЖЕНИЯ =====================
+struct AppState {
+    GtkWidget* window   = nullptr;
+    GtkWidget* stack    = nullptr;   // menu <-> game
+    GtkWidget* gameBox  = nullptr;   // карточка игры (пересобирается при старте)
+
+    // игровые виджеты
+    GtkWidget* lblLevel    = nullptr;
+    GtkWidget* lblTimer    = nullptr;
+    GtkWidget* lblDesc     = nullptr;
+    GtkWidget* lblNumber   = nullptr;  // исходное число
+    GtkWidget* cellsGrid   = nullptr;
+    GtkWidget* lblState    = nullptr;
+    GtkWidget* progressBar = nullptr;
+    std::vector<GtkWidget*> cells;     // метки-ячейки (слева направо)
+
+    // состояние
+    const GameConfig* cfg = nullptr;
+    int level = 1;
+    int digits = 0;
+    int currentId = 0;               // индекс активной ячейки
+    long value10 = 0;                // загаданное число (десятичное)
+    double timer = 0;
+    bool running = false;            // идёт отсчёт времени
+    bool waitingNext = false;        // пауза перед следующим уровнем
+    int waitCounter = 0;
+};
+
+static void rebuildGameView(AppState& st);
+static void startLevel(AppState& st, int lev);
+
+// ===================== СТИЛИ (повторяют дизайн веб-версии) =====================
+static const char* CSS = R"CSS(
+window { background: #eef2ff; }
+.card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+}
+.title { color: #2c3e50; font-size: 26px; font-weight: 700; }
+.subtitle { color: #64748b; font-size: 14px; }
+.gamebtn {
+  padding: 14px 26px;
+  margin: 6px;
+  font-size: 18px;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  background: #4f46e5;
+  color: #ffffff;
+}
+.gamebtn:hover  { background: #4338ca; }
+.gamebtn:active { background: #3730a3; }
+.backbtn {
+  padding: 8px 16px;
+  font-size: 14px;
+  border: none;
+  border-radius: 8px;
+  background: #e5e7eb;
+  color: #333333;
+}
+.backbtn:hover { background: #d1d5db; }
+.stat    { color: #444444; font-size: 15px; }
+.statval { color: #4f46e5; font-size: 15px; font-weight: 700; }
+.desc    { color: #555555; font-style: italic; font-size: 16px; }
+.number {
+  color: #1e293b;
+  font-family: monospace;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.basemark { color: #4f46e5; font-size: 20px; font-weight: 700; }
+.cell {
+  background: #f8fafc;
+  border: 2px solid #cbd5e1;
+  border-radius: 8px;
+  color: #1e293b;
+  font-family: monospace;
+  font-size: 22px;
+  font-weight: 700;
+}
+.cell:hover { border-color: #94a3b8; }
+.cell.active {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+.power { color: #64748b; font-size: 12px; font-family: monospace; }
+.ok   { color: #16a34a; font-weight: 700; font-size: 18px; }
+.bad  { color: #dc2626; font-weight: 700; font-size: 18px; }
+.info { color: #4f46e5; font-weight: 700; font-size: 18px; }
+progressbar trough { min-height: 8px; border-radius: 6px; background: #e2e8f0; }
+progressbar progress { min-height: 8px; border-radius: 6px; background: #4f46e5; }
+.low progress { background: #dc2626; }
+.hint { color: #94a3b8; font-size: 13px; }
+)CSS";
+
+// ===================== ТАЙМЕР / СТАТУС =====================
+static void updateTimerLabel(AppState& st) {
+    if (!st.lblTimer) return;
+    char buf[32];
+    snprintf(buf, sizeof buf, "%.1f", std::max(0.0, st.timer));
+    gtk_label_set_text(GTK_LABEL(st.lblTimer), buf);
+
+    if (st.progressBar && st.cfg) {
+        double full = st.cfg->startTimer;             // масштаб — время первого уровня
+        double frac = std::clamp(st.timer / full, 0.0, 1.0);
+        gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(st.progressBar), frac);
+        GtkStyleContext* sc = gtk_widget_get_style_context(st.progressBar);
+        if (frac < 0.25) gtk_style_context_add_class(sc, "low");
+        else             gtk_style_context_remove_class(sc, "low");
+    }
+}
+
+static void setStateText(AppState& st, const std::string& text, const char* styleClass) {
+    if (!st.lblState) return;
+    GtkStyleContext* sc = gtk_widget_get_style_context(st.lblState);
+    for (const char* c : {"ok", "bad", "info"}) gtk_style_context_remove_class(sc, c);
+    if (styleClass) gtk_style_context_add_class(sc, styleClass);
+    gtk_label_set_text(GTK_LABEL(st.lblState), text.c_str());
+}
+
+// ===================== ПОЛЕ ВВОДА =====================
+static void refreshCellStyles(AppState& st) {
+    for (size_t i = 0; i < st.cells.size(); ++i) {
+        GtkStyleContext* sc = gtk_widget_get_style_context(st.cells[i]);
+        if ((int)i == st.currentId) gtk_style_context_add_class(sc, "active");
+        else                        gtk_style_context_remove_class(sc, "active");
+    }
+}
+
+static int gameStateCheck(AppState& st) {   // 0 — неполно, 1 — верно, 2 — есть ошибка
+    std::string stroka;
+    std::string expected = padStart(toBase(st.value10, st.cfg->toBase), st.digits);
+    for (int i = 0; i < st.digits; ++i) {
+        const char* t = gtk_label_get_text(GTK_LABEL(st.cells[i]));
+        if (!t || !*t) return 0;
+        stroka += t;
+    }
+    return stroka == expected ? 1 : 2;
+}
+
+static void cycleCell(AppState& st, int idx, int delta) {
+    const char* t = gtk_label_get_text(GTK_LABEL(st.cells[idx]));
+    int base = st.cfg->inputBase;
+    std::string cur = (t ? t : "");
+    if (cur.empty()) {
+        gtk_label_set_text(GTK_LABEL(st.cells[idx]), delta > 0 ? "1" : "0");
+        return;
+    }
+    int n = digitValue(cur);
+    n = (n + delta + base) % base;
+    char buf[4];
+    if (base == 16) snprintf(buf, sizeof buf, "%X", n);
+    else            snprintf(buf, sizeof buf, "%d", n);
+    gtk_label_set_text(GTK_LABEL(st.cells[idx]), buf);
+}
+
+// ===================== ТИКЕРЫ =====================
+static gboolean onTick(gpointer data) {
+    AppState& st = *(AppState*)data;
+    if (!st.running || st.waitingNext) return G_SOURCE_CONTINUE;
+    if (gtk_stack_get_visible_child(GTK_STACK(st.stack)) != st.gameBox) return G_SOURCE_CONTINUE;
+
+    int res = gameStateCheck(st);
+    if (res == 1) {
+        st.running = false;
+        setStateText(st, "ВСЕ ВЕРНО!", "ok"); // ВСЕ ВЕРНО!
+        st.waitingNext = true;
+        st.waitCounter = 3;
+        return G_SOURCE_CONTINUE;
+    }
+    if (res == 2) setStateText(st, "??? ЕСТЬ ОШИБКА ???", "bad");
+    else          setStateText(st, "", nullptr);
+
+    st.timer -= 0.1;
+    updateTimerLabel(st);
+
+    if (st.timer < 0) {
+        st.running = false;
+        setStateText(st, "Время вышло :(", "bad"); // Время вышло :(
+        st.waitingNext = true;
+        st.waitCounter = 3;
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+static gboolean onWaitTick(gpointer data) {
+    AppState& st = *(AppState*)data;
+    if (!st.waitingNext) return G_SOURCE_CONTINUE;
+
+    setStateText(st, std::to_string(st.waitCounter) + "...", "info");
+    st.waitCounter--;
+    if (st.waitCounter < 0) {
+        st.waitingNext = false;
+        bool wasTimeout = st.timer < 0;
+        if (wasTimeout) {
+            startLevel(st, 1);
+        } else if (st.level + 1 <= st.cfg->levelCount) {
+            startLevel(st, st.level + 1);
+        } else {
+            setStateText(st, "ИГРА ЗАВЕРШЕНА!", "ok"); // ИГРА ЗАВЕРШЕНА!
+        }
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+// ===================== ДЕЙСТВИЯ ПОЛЬЗОВАТЕЛЯ =====================
+static void moveCursor(AppState& st, int dir) {
+    if (dir > 0) st.currentId = (st.currentId + 1) % st.digits;
+    else         st.currentId = (st.currentId - 1 + st.digits) % st.digits;
+    refreshCellStyles(st);
+}
+
+static gboolean onCellClick(GtkWidget* w, GdkEventButton*, gpointer data) {
+    AppState& st = *(AppState*)data;
+    for (size_t i = 0; i < st.cells.size(); ++i) {
+        if (gtk_widget_get_parent(st.cells[i]) == w) {
+            st.currentId = (int)i;
+            refreshCellStyles(st);
+            cycleCell(st, (int)i, +1);
+            break;
+        }
+    }
+    return TRUE;
+}
+
+static gboolean onKeyPress(GtkWidget*, GdkEventKey* e, gpointer data) {
+    AppState& st = *(AppState*)data;
+    if (!st.cfg || st.waitingNext) return FALSE;
+    if (gtk_stack_get_visible_child(GTK_STACK(st.stack)) != st.gameBox) {
+        if (e->keyval == GDK_KEY_Escape) gtk_main_quit();
+        return FALSE;
+    }
+
+    switch (e->keyval) {
+        case GDK_KEY_Escape:
+            gtk_stack_set_visible_child_name(GTK_STACK(st.stack), "menu");
+            return TRUE;
+        case GDK_KEY_Left:
+            moveCursor(st, -1); return TRUE;
+        case GDK_KEY_Right:
+            moveCursor(st, +1); return TRUE;
+        case GDK_KEY_Up: case GDK_KEY_w: case GDK_KEY_W:
+            cycleCell(st, st.currentId, +1); return TRUE;
+        case GDK_KEY_Down: case GDK_KEY_s: case GDK_KEY_S:
+            cycleCell(st, st.currentId, -1); return TRUE;
+    }
+
+    guint kv = e->keyval;
+    int d = -1;
+    if (kv >= GDK_KEY_0 && kv <= GDK_KEY_9)            d = kv - GDK_KEY_0;
+    else if (kv >= GDK_KEY_KP_0 && kv <= GDK_KEY_KP_9) d = kv - GDK_KEY_KP_0;
+    else if (st.cfg->inputBase == 16 && kv >= GDK_KEY_a && kv <= GDK_KEY_f) d = kv - GDK_KEY_a + 10;
+    else if (st.cfg->inputBase == 16 && kv >= GDK_KEY_A && kv <= GDK_KEY_F) d = kv - GDK_KEY_A + 10;
+
+    if (d >= 0 && d < st.cfg->inputBase) {
+        char buf[4];
+        if (st.cfg->inputBase == 16) snprintf(buf, sizeof buf, "%X", d);
+        else                         snprintf(buf, sizeof buf, "%d", d);
+        gtk_label_set_text(GTK_LABEL(st.cells[st.currentId]), buf);
+        moveCursor(st, +1);
+        return TRUE;
+    }
+    return FALSE;
+}
+
+// ===================== ЭКРАН ИГРЫ =====================
+static void clearBox(GtkWidget* box) {
+    GList* kids = gtk_container_get_children(GTK_CONTAINER(box));
+    for (GList* l = kids; l; l = l->next) gtk_widget_destroy(GTK_WIDGET(l->data));
+    g_list_free(kids);
+}
+
+static void backToMenu(GtkButton*, gpointer data) {
+    AppState& st = *(AppState*)data;
+    st.running = false;
+    st.waitingNext = false;
+    gtk_stack_set_visible_child_name(GTK_STACK(st.stack), "menu");
+}
+
+static void buildCellsGrid(AppState& st) {
+    if (st.cellsGrid) {
+        gtk_widget_destroy(st.cellsGrid);
+        st.cellsGrid = nullptr;
+    }
+    st.cells.clear();
+
+    st.cellsGrid = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(st.cellsGrid), 6);
+    gtk_grid_set_row_spacing(GTK_GRID(st.cellsGrid), 4);
+    gtk_widget_set_halign(st.cellsGrid, GTK_ALIGN_CENTER);
+
+    int row = 0;
+    if (st.cfg->showPowers) {                     // степени двойки (только игра 10 -> 2)
+        for (int i = 0; i < st.digits; ++i) {
+            long p = 1L << (st.digits - 1 - i);
+            char buf[16]; snprintf(buf, sizeof buf, "%ld", p);
+            GtkWidget* l = gtk_label_new(buf);
+            gtk_style_context_add_class(gtk_widget_get_style_context(l), "power");
+            gtk_grid_attach(GTK_GRID(st.cellsGrid), l, i, row, 1, 1);
+        }
+        row = 1;
+    }
+
+    for (int i = 0; i < st.digits; ++i) {
+        GtkWidget* ev = gtk_event_box_new();
+        GtkWidget* lbl = gtk_label_new("0");
+        gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "cell");
+        gtk_widget_set_size_request(lbl, 46, 46);
+        gtk_container_add(GTK_CONTAINER(ev), lbl);
+        gtk_widget_add_events(ev, GDK_BUTTON_PRESS_MASK);
+        g_signal_connect(ev, "button-press-event", G_CALLBACK(onCellClick), &st);
+        gtk_grid_attach(GTK_GRID(st.cellsGrid), ev, i, row, 1, 1);
+        st.cells.push_back(lbl);
+    }
+    // сетка всегда занимает фиксированную позицию 3 в вертикальном боксе
+    gtk_box_pack_start(GTK_BOX(st.gameBox), st.cellsGrid, FALSE, FALSE, 6);
+    gtk_box_reorder_child(GTK_BOX(st.gameBox), st.cellsGrid, 3);
+    gtk_widget_show_all(st.cellsGrid);
+}
+
+static void rebuildGameView(AppState& st) {
+    // переиспользуем одну и ту же карточку страницы "game" — просто очищаем и наполняем заново
+    clearBox(st.gameBox);
+    gtk_widget_set_size_request(st.gameBox, 680, -1);
+
+    // 0 — верхняя панель
+    GtkWidget* top = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget* back = gtk_button_new_with_label("← В меню"); // ← В меню
+    gtk_style_context_add_class(gtk_widget_get_style_context(back), "backbtn");
+    g_signal_connect(back, "clicked", G_CALLBACK(backToMenu), &st);
+    gtk_box_pack_start(GTK_BOX(top), back, FALSE, FALSE, 0);
+
+    GtkWidget* sl1 = gtk_label_new("Уровень:"); // Уровень:
+    gtk_style_context_add_class(gtk_widget_get_style_context(sl1), "stat");
+    st.lblLevel = gtk_label_new("1");
+    gtk_style_context_add_class(gtk_widget_get_style_context(st.lblLevel), "statval");
+    GtkWidget* sp = gtk_label_new("      ");
+    GtkWidget* sl2 = gtk_label_new("Время:"); // Время:
+    gtk_style_context_add_class(gtk_widget_get_style_context(sl2), "stat");
+    st.lblTimer = gtk_label_new("");
+    gtk_style_context_add_class(gtk_widget_get_style_context(st.lblTimer), "statval");
+    gtk_box_pack_end(GTK_BOX(top), st.lblTimer, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(top), sl2, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(top), sp, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(top), st.lblLevel, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(top), sl1, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(st.gameBox), top, FALSE, FALSE, 0);
+
+    // 1 — описание
+    st.lblDesc = gtk_label_new(st.cfg->desc);
+    gtk_style_context_add_class(gtk_widget_get_style_context(st.lblDesc), "desc");
+    gtk_box_pack_start(GTK_BOX(st.gameBox), st.lblDesc, FALSE, FALSE, 4);
+
+    // 2 — строка «число → система»
+    GtkWidget* numLine = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_halign(numLine, GTK_ALIGN_CENTER);
+    char sub[96];
+    snprintf(sub, sizeof sub, "<span foreground='#4f46e5' size='large' weight='bold'>%d</span>", st.cfg->fromBase);
+    GtkWidget* l1 = gtk_label_new(nullptr);
+    gtk_label_set_markup(GTK_LABEL(l1), sub);
+    st.lblNumber = gtk_label_new("");
+    gtk_style_context_add_class(gtk_widget_get_style_context(st.lblNumber), "number");
+    GtkWidget* arr = gtk_label_new("\xe2\x86\x92"); // → (UTF-8 остаётся как есть — стрелка есть в CP1251? нет) — см. ниже
+    gtk_style_context_add_class(gtk_widget_get_style_context(arr), "basemark");
+    snprintf(sub, sizeof sub, "<span foreground='#4f46e5' size='large' weight='bold'>%d</span>", st.cfg->toBase);
+    GtkWidget* l2 = gtk_label_new(nullptr);
+    gtk_label_set_markup(GTK_LABEL(l2), sub);
+    gtk_box_pack_start(GTK_BOX(numLine), l1, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(numLine), st.lblNumber, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(numLine), arr, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(numLine), l2, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(st.gameBox), numLine, FALSE, FALSE, 6);
+
+    // 3 — сетка ячеек создаётся в buildCellsGrid (placeholder)
+    GtkWidget* placeholder = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(st.gameBox), placeholder, FALSE, FALSE, 6);
+
+    // 4 — полоса времени
+    st.progressBar = gtk_progress_bar_new();
+    gtk_widget_set_size_request(st.progressBar, 420, 8);
+    gtk_widget_set_halign(st.progressBar, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(st.gameBox), st.progressBar, FALSE, FALSE, 2);
+
+    // 5 — статус
+    st.lblState = gtk_label_new("");
+    gtk_box_pack_start(GTK_BOX(st.gameBox), st.lblState, FALSE, FALSE, 4);
+
+    // 6 — подсказка
+    GtkWidget* hint = gtk_label_new("Стрелки ← → — выбор ячейки · ↑ ↓ — +1/-1 · клик — сменить цифру · 0-9/A-F — ввод · Esc — меню");
+    gtk_style_context_add_class(gtk_widget_get_style_context(hint), "hint");
+    gtk_box_pack_start(GTK_BOX(st.gameBox), hint, FALSE, FALSE, 0);
+
+    // заменяем страницу "game": карточка та же — наполнение пересобрано выше
+    gtk_widget_show_all(st.gameBox);
+}
+
+static void startLevel(AppState& st, int lev) {
+    st.level = lev;
+    st.timer = st.cfg->startTimer - (lev - 1) * st.cfg->timerStep;
+
+    st.digits = st.cfg->maxDigits;
+    if (lev >= 7) {
+        if (st.cfg->id == 1) st.digits += 3;
+        else if (st.cfg->id == 2) st.digits += 4;
+        else if (st.cfg->id == 3 || st.cfg->id == 4) st.digits += 1;
+    }
+    st.currentId = 0;
+
+    auto range = st.cfg->numRange(lev);
+    st.value10 = rndLong(range.first, range.second);
+
+    std::string shown;
+    if (st.cfg->id == 3)      shown = groupBits(toBase(st.value10, 2), 3);
+    else if (st.cfg->id == 4) shown = groupBits(toBase(st.value10, 2), 4);
+    else                      shown = toBase(st.value10, st.cfg->fromBase);
+    gtk_label_set_text(GTK_LABEL(st.lblNumber), shown.c_str());
+
+    buildCellsGrid(st);
+    refreshCellStyles(st);
+
+    char buf[16]; snprintf(buf, sizeof buf, "%d", st.level);
+    gtk_label_set_text(GTK_LABEL(st.lblLevel), buf);
+    setStateText(st, "", nullptr);
+    st.running = true;
+    st.waitingNext = false;
+    updateTimerLabel(st);
+}
+
+static void startGame(GtkButton* b, gpointer data) {
+    AppState& st = *(AppState*)data;
+    const GameConfig* cfg = (const GameConfig*)g_object_get_data(G_OBJECT(b), "cfg");
+    st.cfg = cfg;
+    rebuildGameView(st);
+    startLevel(st, 1);
+    gtk_stack_set_visible_child_name(GTK_STACK(st.stack), "game");
+}
+
+// ===================== МЕНЮ =====================
+static void buildMenu(AppState& st) {
+    GtkWidget* menu = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_style_context_add_class(gtk_widget_get_style_context(menu), "card");
+    gtk_widget_set_halign(menu, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(menu, GTK_ALIGN_CENTER);
+
+    GtkWidget* title = gtk_label_new("Игры по системам счисления"); // Игры по системам счисления
+    gtk_style_context_add_class(gtk_widget_get_style_context(title), "title");
+    gtk_box_pack_start(GTK_BOX(menu), title, FALSE, FALSE, 4);
+
+    GtkWidget* subtitle = gtk_label_new("Выберите режим перевода чисел"); // Выберите режим перевода чисел
+    gtk_style_context_add_class(gtk_widget_get_style_context(subtitle), "subtitle");
+    gtk_box_pack_start(GTK_BOX(menu), subtitle, FALSE, FALSE, 0);
+
+    GtkWidget* grid = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 12);
+    gtk_widget_set_halign(grid, GTK_ALIGN_CENTER);
+
+    int i = 0;
+    for (const auto& g : makeGames()) {
+        GtkWidget* b = gtk_button_new_with_label(g.title);
+        gtk_style_context_add_class(gtk_widget_get_style_context(b), "gamebtn");
+        GameConfig* copy = new GameConfig(g);
+        g_object_set_data_full(G_OBJECT(b), "cfg", copy,
+                               [](gpointer p){ delete (GameConfig*)p; });
+        g_signal_connect(b, "clicked", G_CALLBACK(startGame), &st);
+        gtk_grid_attach(GTK_GRID(grid), b, i % 3, i / 3, 1, 1);
+        i++;
+    }
+    gtk_box_pack_start(GTK_BOX(menu), grid, FALSE, FALSE, 10);
+    gtk_stack_add_named(GTK_STACK(st.stack), menu, "menu");
+}
+
+// ===================== MAIN =====================
+int main(int argc, char** argv) {
+    gtk_init(&argc, &argv);
+
+    GtkCssProvider* provider = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(provider, CSS, -1, nullptr);
+    gtk_style_context_add_provider_for_screen(
+        gdk_screen_get_default(), GTK_STYLE_PROVIDER(provider),
+        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+    AppState* st = new AppState();
+    st->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    gtk_window_set_title(GTK_WINDOW(st->window),
+        "Игры по системам счисления");
+    gtk_window_set_default_size(GTK_WINDOW(st->window), 900, 640);
+    g_signal_connect(st->window, "destroy", G_CALLBACK(gtk_main_quit), nullptr);
+
+    st->stack = gtk_stack_new();
+    gtk_stack_set_transition_type(GTK_STACK(st->stack), GTK_STACK_TRANSITION_TYPE_CROSSFADE);
+    gtk_container_add(GTK_CONTAINER(st->window), st->stack);
+
+    buildMenu(*st);
+
+    // placeholder страницы "game" (пересобирается при старте)
+    st->gameBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_stack_add_named(GTK_STACK(st->stack), st->gameBox, "game");
+
+    g_signal_connect(st->window, "key-press-event", G_CALLBACK(onKeyPress), st);
+
+    g_timeout_add(100, onTick, st);
+    g_timeout_add(1000, onWaitTick, st);
+
+    gtk_widget_show_all(st->window);
+    gtk_main();
+    delete st;
+    return 0;
+}
