@@ -21,6 +21,9 @@ struct GameConfig {
     int fromBase, toBase, inputBase;
     int maxDigits, levelCount;
     double startTimer, timerStep;
+    // Число ячеек ввода на уровне (если не задано — maxDigits с ростом на 7+ уровне).
+    // Игра 2 → 10: уровни 1-5 — 2 ячейки, уровни 6+ — 3 ячейки.
+    std::function<int(int)> digitsForLevel;
     const char* title;   // подпись кнопки в меню (UTF-8)
     const char* desc;    // описание на игровом экране (UTF-8)
     std::function<std::pair<int,int>(int)> numRange;
@@ -32,24 +35,30 @@ struct GameConfig {
 
 inline std::vector<GameConfig> games() {
     std::vector<GameConfig> g;
-    g.push_back({1, 8, 2, 2, 9, 10, 31, 2, "8 \xE2\x86\x92 2",
+    g.push_back({1, 8, 2, 2, 9, 10, 31, 2, nullptr, "8 \xE2\x86\x92 2",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 8 \xD0\xA1.\xD0\xA1. \xD0\xB2 2 \xD0\xA1.\xD0\xA1.",
         [](int){ return std::make_pair(64, 511); }, false, false});
-    g.push_back({2, 16, 2, 2, 12, 10, 35, 1, "16 \xE2\x86\x92 2",
+    g.push_back({2, 16, 2, 2, 12, 10, 35, 1, nullptr, "16 \xE2\x86\x92 2",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 16 \xD0\xA1.\xD0\xA1. \xD0\xB2 2 \xD0\xA1.\xD0\xA1.",
         [](int){ return std::make_pair(256, 4095); }, false, false});
-    g.push_back({3, 2, 8, 8, 3, 10, 35, 2, "2 \xE2\x86\x92 8",
+    g.push_back({3, 2, 8, 8, 3, 10, 35, 2, nullptr, "2 \xE2\x86\x92 8",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 2 \xD0\xA1.\xD0\xA1. \xD0\xB2 8 \xD0\xA1.\xD0\xA1.",
         [](int lev){ return lev >= 7 ? std::make_pair(513, 4095) : std::make_pair(64, 511); }, false, false});
-    g.push_back({4, 2, 16, 16, 3, 10, 35, 2, "2 \xE2\x86\x92 16",
+    g.push_back({4, 2, 16, 16, 3, 10, 35, 2, nullptr, "2 \xE2\x86\x92 16",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 2 \xD0\xA1.\xD0\xA1. \xD0\xB2 16 \xD0\xA1.\xD0\xA1.",
         [](int lev){ return lev >= 7 ? std::make_pair(4097, 65534) : std::make_pair(256, 4095); }, false, false});
-    g.push_back({5, 10, 2, 2, 8, 13, 31, 1, "10 \xE2\x86\x92 2",
+    g.push_back({5, 10, 2, 2, 8, 13, 31, 1, nullptr, "10 \xE2\x86\x92 2",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 10 \xD0\xA1.\xD0\xA1. \xD0\xB2 2 \xD0\xA1.\xD0\xA1.",
         [](int lev){ return lev <= 5 ? std::make_pair(17, 127) : std::make_pair(129, 255); }, false, true});
-    g.push_back({6, 2, 10, 10, 2, 10, 35, 2, "2 \xE2\x86\x92 10",
+    g.push_back({6, 2, 10, 10, 2, 10, 35, 2, [](int lev){ return lev <= 5 ? 2 : 3; }, "2 \xE2\x86\x92 10",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 2 \xD0\xA1.\xD0\xA1. \xD0\xB2 10 \xD0\xA1.\xD0\xA1.",
-        [](int lev){ return lev <= 5 ? std::make_pair(17, 127) : std::make_pair(129, 255); }, true, false});
+        [](int lev) {
+            if (lev == 1) return std::make_pair(8, 16);
+            if (lev == 2) return std::make_pair(17, 32);
+            if (lev == 3) return std::make_pair(33, 64);
+            if (lev <= 5) return std::make_pair(65, 128);
+            return std::make_pair(129, 511);
+        }, true, false});
     return g;
 }
 
@@ -286,11 +295,17 @@ private:
         timeFull = cfg->startTimer;
         timeLeft = cfg->startTimer - (lev - 1) * cfg->timerStep;
 
-        digits = cfg->maxDigits;
-        if (lev >= 7) {
-            if (cfg->id == 1) digits += 3;
-            else if (cfg->id == 2) digits += 4;
-            else if (cfg->id == 3 || cfg->id == 4) digits += 1;
+        if (cfg->digitsForLevel) {
+            // Динамическое число ячеек ввода по уровням
+            // (игра 2 → 10: уровни 1-5 — 2 ячейки, уровни 6+ — 3 ячейки).
+            digits = cfg->digitsForLevel(lev);
+        } else {
+            digits = cfg->maxDigits;
+            if (lev >= 7) {
+                if (cfg->id == 1) digits += 3;
+                else if (cfg->id == 2) digits += 4;
+                else if (cfg->id == 3 || cfg->id == 4) digits += 1;
+            }
         }
         cursor = 0;
         cells.assign(digits, "0");
