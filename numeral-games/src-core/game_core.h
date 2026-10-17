@@ -24,7 +24,7 @@ struct GameConfig {
     const char* title;   // подпись кнопки в меню (UTF-8)
     const char* desc;    // описание на игровом экране (UTF-8)
     std::function<std::pair<int,int>(int)> numRange;
-    bool showPowers;     // показывать степени двойки над ячейками (10 → 2)
+    bool showPowers;     // показывать степени двойки над двоичными ячейками (игры 10 → 2 и 2 → 10)
 };
 
 inline std::vector<GameConfig> games() {
@@ -46,7 +46,7 @@ inline std::vector<GameConfig> games() {
         [](int){ return std::make_pair(1, 255); }, true});
     g.push_back({6, 2, 10, 10, 2, 10, 35, 2, "2 \xE2\x86\x92 10",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 2 \xD0\xA1.\xD0\xA1. \xD0\xB2 10 \xD0\xA1.\xD0\xA1.",
-        [](int lev){ return lev == 1 ? std::make_pair(1, 9) : std::make_pair(10, 99); }, false});
+        [](int lev){ return lev == 1 ? std::make_pair(1, 9) : std::make_pair(10, 99); }, true});
     return g;
 }
 
@@ -138,6 +138,18 @@ public:
         if (cfg->id == 3) return groupBits(toBase(value10, 2), 3);
         if (cfg->id == 4) return groupBits(toBase(value10, 2), 4);
         return toBase(value10, cfg->fromBase);
+    }
+
+    // Для режима 2 → 10: значение, которое игрок набирает двоичными ячейками
+    // (по умолчанию 0). Остальные режимы возвращают -1 (не используется).
+    long enteredValue() const {
+        if (!cfg || cfg->id != 6) return -1;
+        long v = 0;
+        for (int i = 0; i < digits; ++i) {
+            int d = digitValue(cells[i]);
+            v = v * 2 + (d > 0 ? 1 : 0);
+        }
+        return v;
     }
 
     std::string expected() const {   // правильный ответ

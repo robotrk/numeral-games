@@ -266,8 +266,15 @@ static void renderGame(App& app, Graphics& g, float W, float H, float alpha) {
     drawText(g, L"\x2192", RectF(cx - arrowW / 2 + bound.Width / 2 + 10, lineY, arrowW, 40), F->basemark, ca(COL_PRIMARY));
     swprintf(buf, 64, L"%d", e.cfg->toBase);
     drawText(g, buf, RectF(cx + bound.Width / 2 + arrowW / 2 + 16, lineY + 8, 24, 28), F->basemark, ca(COL_PRIMARY));
+    // режим 2 -> 10: показываем, что получилось у пользователя (= 0 по умолчанию)
+    if (e.cfg->id == 6) {
+        long ev = e.enteredValue();
+        wchar_t eb[32]; swprintf(eb, 32, L"= %ld", ev < 0 ? 0 : ev);
+        drawText(g, eb, RectF(cx + bound.Width / 2 + arrowW / 2 + 46, lineY, 120, 40),
+                 F->number, ca(COL_NUM), AHLeft);
+    }
 
-    // --- степени двойки (игра 10→2) ---
+    // --- степени двойки (игры 10->2 и 2->10, двоичное поле) ---
     int n = e.digits;
     float cs = app.cellSize, gap = app.cellGap;
     float top = app.gridTop;

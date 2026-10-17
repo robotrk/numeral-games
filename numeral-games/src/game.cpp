@@ -2,8 +2,8 @@
 #include "game.h"
 #include "platform.h"
 
-#include <algorithm>
 #include <chrono>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -74,6 +74,14 @@ std::string Game::shownNumber() const {
     return toBase(value10_, cfg_.fromBase);
 }
 
+long Game::enteredValue() const {   // режим 2->10: что набрал игрок (по умолчанию 0)
+    if (cfg_.id != 6) return -1;
+    long v = 0;
+    for (int i = 0; i < digits_; ++i)
+        v = v * 2 + (cells_[i].v > '0' ? 1 : 0);
+    return v;
+}
+
 std::string Game::expected() const {
     return padStart(toBase(value10_, cfg_.toBase), digits_);
 }
@@ -116,9 +124,12 @@ void Game::render(const std::string& status) {
 
     os << "  Число:  \x1b[1;36m" << shownNumber() << "\x1b[0m"
        << "  (" << cfg_.fromBase << " С.С.)  ->  ответ в "
-       << cfg_.toBase << " С.С.\n\n";
+       << cfg_.toBase << " С.С.";
+    if (cfg_.id == 6)
+       os << "   = у вас получилось: " << std::max(0L, enteredValue());
+    os << "\n\n";
 
-    if (cfg_.showPowers) {
+    if (cfg_.showPowers) {   // степени двойки над двоичным полем (игры 10->2 и 2->10)
         os << "          ";
         for (int i = digits_ - 1; i >= 0; --i) {
             os.width(4);

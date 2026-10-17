@@ -18,6 +18,7 @@ struct AppState {
     GtkWidget* lblTimer    = nullptr;
     GtkWidget* lblDesc     = nullptr;
     GtkWidget* lblNumber   = nullptr;  // исходное число
+    GtkWidget* lblEntered  = nullptr;  // режим 2 -> 10: значение, набранное игроком
     GtkWidget* cellsGrid   = nullptr;
     GtkWidget* lblState    = nullptr;
     GtkWidget* progressBar = nullptr;
@@ -131,6 +132,14 @@ static void refreshCellStyles(AppState& st) {
 static void syncCellsFromEngine(AppState& st) {
     for (size_t i = 0; i < st.cells.size() && i < st.eng.cells.size(); ++i)
         gtk_label_set_text(GTK_LABEL(st.cells[i]), st.eng.cells[i].c_str());
+    // режим 2 -> 10: показываем, что получилось у пользователя (по умолчанию 0)
+    if (st.lblEntered) {
+        long v = st.eng.enteredValue();
+        if (v >= 0) {
+            char buf[32]; snprintf(buf, sizeof buf, "%ld", v);
+            gtk_label_set_text(GTK_LABEL(st.lblEntered), buf);
+        }
+    }
 }
 
 // ===================== ТИКЕР =====================
@@ -270,7 +279,7 @@ static void buildCellsGrid(AppState& st) {
     gtk_widget_set_halign(st.cellsGrid, GTK_ALIGN_CENTER);
 
     int row = 0;
-    if (st.eng.cfg->showPowers) {                 // степени двойки (только игра 10 -> 2)
+    if (st.eng.cfg->showPowers) {   // степени двойки (игры 10 -> 2 и 2 -> 10, двоичное поле)
         for (int i = 0; i < st.eng.digits; ++i) {
             long p = 1L << (st.eng.digits - 1 - i);
             char buf[16]; snprintf(buf, sizeof buf, "%ld", p);
@@ -348,6 +357,16 @@ static void rebuildGameView(AppState& st) {
     gtk_box_pack_start(GTK_BOX(numLine), st.lblNumber, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(numLine), arr, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(numLine), l2, FALSE, FALSE, 0);
+    // режим 2 -> 10: после стрелки показываем, что получилось у пользователя (= 0 по умолчанию)
+    st.lblEntered = nullptr;
+    if (st.eng.cfg && st.eng.cfg->id == 6) {
+        GtkWidget* eq = gtk_label_new("=");
+        gtk_style_context_add_class(gtk_widget_get_style_context(eq), "basemark");
+        st.lblEntered = gtk_label_new("0");
+        gtk_style_context_add_class(gtk_widget_get_style_context(st.lblEntered), "number");
+        gtk_box_pack_start(GTK_BOX(numLine), eq, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(numLine), st.lblEntered, FALSE, FALSE, 0);
+    }
     gtk_box_pack_start(GTK_BOX(st.gameBox), numLine, FALSE, FALSE, 6);
 
     // 3 — placeholder под сетку ячеек (buildCellsGrid вставит её на это место)
