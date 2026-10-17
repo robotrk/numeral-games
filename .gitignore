@@ -2,3 +2,7 @@
 *.obj
 numeral-games/src-gui/gui_test
 *.log
+numeral-games/build/
+numeral-games/src-gui/gui_test
+numeral-games/build/
+numeral-games/src-gui/gui_test
