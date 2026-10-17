@@ -1,7 +1,17 @@
-# Numeral Games (C++ порт)
+# Numeral Games (C++ порт) · v1.1
 
-Настольная (консольная) версия игр по системам счисления, портированная с веб-страницы.
-Портативные бинарники **x86-64** для **Linux** и **Windows 10/11**, без внешних зависимостей.
+Игры по системам счисления, портированные с веб-страницы.
+Портативные бинарники **x86-64** для **Linux** и **Windows 10/11**.
+
+## Версии интерфейса
+
+| Версия | Описание | Бинарник |
+|--------|----------|----------|
+| **GUI (рекомендуется)** | Динамический графический интерфейс: таймер с анимацией, кнопки, ячейки ввода, hover-эффекты, плавные переходы экранов. Без консольного окна. | Linux (GTK3): `release/numeral_games_gui-linux-x86_64`<br>Windows (Win32+GDI+): `release/numeral_games_gui-win-x64.exe` |
+| Консоль | Классическая текстовая версия (TUI). | `release/numeral_games-{linux,win}` |
+
+**GUI для Linux** собран на GTK3 — корректно встраивается в темы KDE Plasma (Breeze) и XFCE (Adwaita), поддерживает тёмные темы.
+**GUI для Windows** — нативный Win32 + GDI+ (60 fps, двойная буферизация, ClearType), зависит только от системных DLL, ничего устанавливать не нужно.
 
 ## Игры (как в веб-версии)
 
@@ -28,7 +38,24 @@
 
 ## Сборка
 
-### Linux x86-64
+### GUI-версия (рекомендуется)
+
+**Linux (KDE / XFCE, GTK3):**
+```bash
+sudo apt install libgtk-3-dev build-essential   # Debian/Ubuntu/Fedora: dnf install gtk3-devel
+./build-gui-linux.sh                             # → build/numeral_games_gui
+# или через CMake (собирает консоль + GUI):
+cmake -B build && cmake --build build
+```
+
+**Windows 10/11 (Win32 + GDI+, без внешних зависимостей):**
+```bat
+build-gui-windows.bat
+:: автоматически выбирает MSVC (cl) или MinGW-w64 (g++ -mwindows)
+:: → numeral_games_gui.exe — запуск двойным кликом, консольное окно НЕ появляется
+```
+
+### Консоль x86-64
 
 ```bash
 ./build-linux.sh            # cmake + g++, результат: build/numeral_games
