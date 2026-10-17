@@ -376,12 +376,14 @@ static void rebuildGameView(AppState& st) {
     gtk_style_context_add_class(gtk_widget_get_style_context(st.lblDesc), "desc");
     gtk_box_pack_start(GTK_BOX(st.gameBox), st.lblDesc, FALSE, FALSE, 4);
 
-    // 2 — строка «число → система»; над числом — веса разрядов (режим 2 -> 10)
-    GtkWidget* numCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    // 2 — строка «число → система»; над числом — веса разрядов (режим 2 -> 10),
+    // с увеличенным отступом, чтобы веса стояли чуть ниже, ближе к цифрам
+    GtkWidget* numCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_halign(numCol, GTK_ALIGN_CENTER);
     st.lblWeights = nullptr;
     if (st.eng.cfg && st.eng.cfg->showPowers) {   // только игра 2 -> 10
         st.lblWeights = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+        gtk_widget_set_margin_bottom(st.lblWeights, 4); // разряды чуть пониже
         gtk_box_pack_start(GTK_BOX(numCol), st.lblWeights, FALSE, FALSE, 0);
     }
     GtkWidget* numLine = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
@@ -401,10 +403,11 @@ static void rebuildGameView(AppState& st) {
     gtk_box_pack_start(GTK_BOX(numLine), st.lblNumber, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(numLine), arr, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(numLine), l2, FALSE, FALSE, 0);
-    // режим 10 -> 2: после стрелки показываем десятичное значение, которое
-    // игрок набирает двоичными ячейками. Пусто, пока ничего не набрано.
+    // режимы 10 -> 2 и 2 -> 10: после стрелки показываем живое значение,
+    // которое игрок набирает ячейками (десятичное / двоичное соответственно).
+    // Пусто, пока ничего не набрано.
     st.lblEntered = nullptr;
-    if (st.eng.cfg && st.eng.cfg->id == 5) {
+    if (st.eng.cfg && (st.eng.cfg->id == 5 || st.eng.cfg->id == 6)) {
         GtkWidget* eq = gtk_label_new("=");
         gtk_style_context_add_class(gtk_widget_get_style_context(eq), "basemark");
         st.lblEntered = gtk_label_new("");

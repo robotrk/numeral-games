@@ -249,7 +249,7 @@ static void renderGame(App& app, Graphics& g, float W, float H, float alpha) {
     drawText(g, u8to16(e.cfg->desc), RectF(40, 64, W - 80, 26), F->desc, ca(COL_DESC));
 
     // --- строка «число → система» ---
-    float lineY = 98;
+    float lineY = 102;               // чуть ниже: освобождает место под веса разрядов
     std::wstring num = u8to16(e.numberText());
     // измерим ширину числа
     RectF bound;
@@ -274,7 +274,8 @@ static void renderGame(App& app, Graphics& g, float W, float H, float alpha) {
                 long wgt = 1L << (nd - 1 - i);
                 wchar_t wb[16]; swprintf(wb, 16, L"%ld", wgt);
                 float cellCx = numX + (i + 0.5f) * digitW;
-                RectF wr(cellCx - digitW * 1.6f, lineY - 20, digitW * 3.2f, 18);
+                // веса разрядов ставим чуть ниже — вплотную над цифрами числа
+                RectF wr(cellCx - digitW * 1.6f, lineY - 17, digitW * 3.2f, 16);
                 drawText(g, wb, wr, F->power, ca(COL_MUTED));
             }
         }
@@ -286,10 +287,10 @@ static void renderGame(App& app, Graphics& g, float W, float H, float alpha) {
     swprintf(buf, 64, L"%d", e.cfg->toBase);
     float rightEdge = cx + bound.Width / 2 + arrowW / 2 + 16 + lineShift + 24;
     drawText(g, buf, RectF(rightEdge - 24, lineY + 8, 24, 28), F->basemark, ca(COL_PRIMARY));
-    // режим 10 -> 2: справа от задания показываем десятичное значение, которое
-    // игрок набирает двоичными ячейками. Пока ничего не набрано — пусто,
-    // чтобы нуль по умолчанию не путал игрока.
-    if (e.cfg->id == 5) {
+    // режимы 10 -> 2 и 2 -> 10: справа от задания показываем живое значение,
+    // которое игрок набирает ячейками (десятичное / двоичное соответственно).
+    // Пока ничего не набрано — пусто, чтобы нуль по умолчанию не путал игрока.
+    if (e.cfg->id == 5 || e.cfg->id == 6) {
         std::wstring ev = u8to16(e.enteredValueText());
         if (!ev.empty()) {
             drawText(g, L"=", RectF(rightEdge + 18, lineY, 20, 40),

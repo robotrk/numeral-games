@@ -49,7 +49,7 @@ inline std::vector<GameConfig> games() {
         [](int){ return std::make_pair(1, 255); }, false, true});
     g.push_back({6, 2, 10, 10, 2, 10, 35, 2, "2 \xE2\x86\x92 10",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 2 \xD0\xA1.\xD0\xA1. \xD0\xB2 10 \xD0\xA1.\xD0\xA1.",
-        [](int lev){ return lev == 1 ? std::make_pair(1, 9) : std::make_pair(10, 99); }, true, false});
+        [](int lev){ return lev <= 5 ? std::make_pair(17, 127) : std::make_pair(129, 255); }, true, false});
     return g;
 }
 
@@ -143,22 +143,34 @@ public:
         return toBase(value10, cfg->fromBase);
     }
 
-    // Режим 10 → 2: десятичное значение, которое игрок набирает двоичными
-    // ячейками ввода. Возвращается пустая строка, пока ни одна ячейка не
-    // заполнена (все "0" по умолчанию) — чтобы нуль не путал игрока.
+    // Живое значение, которое игрок набирает ячейками ответа
+    // (показывается справа от задания, рядом со стрелкой):
+    //  • режим 10 → 2: десятичное число, соответствующее набранной двоичной
+    //    записи (для самопроверки);
+    //  • режим 2 → 10: число, которое сейчас набрано в десятичных ячейках.
+    // Пока все ячейки равны нулю (состояние по умолчанию), возвращается
+    // пустая строка — чтобы «0» не путало игрока.
     std::string enteredValueText() const {
-        if (!cfg || cfg->id != 5) return "";
+        if (!cfg || (cfg->id != 5 && cfg->id != 6)) return "";
         bool any = false;
         for (int i = 0; i < digits; ++i)
             if (digitValue(cells[i]) > 0) { any = true; break; }
         if (!any) return "";
-        long v = 0;
-        for (int i = 0; i < digits; ++i) {
-            int d = digitValue(cells[i]);
-            v = v * 2 + (d > 0 ? 1 : 0);
+        if (cfg->id == 5) {                       // ввод в 2 → вывод в 10
+            long v = 0;
+            for (int i = 0; i < digits; ++i) {
+                int d = digitValue(cells[i]);
+                v = v * 2 + (d > 0 ? 1 : 0);
+            }
+            char buf[32]; snprintf(buf, sizeof buf, "%ld", v);
+            return buf;
         }
+        // режим 2 → 10: считаем набранное десятичное число и показываем
+        // его двоичную запись (по числу разрядов ввода, без ведущих нулей)
+        long v = 0;
+        for (int i = 0; i < digits; ++i) v = v * 10 + digitValue(cells[i]);
         char buf[32]; snprintf(buf, sizeof buf, "%ld", v);
-        return buf;
+        return buf;   // показываем ровно то, что набрано в ячейках ответа
     }
 
     // Режим 2 → 10: веса разрядов (степени двойки) НАД ЗАДАНИЕМ — над
