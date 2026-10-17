@@ -24,29 +24,32 @@ struct GameConfig {
     const char* title;   // подпись кнопки в меню (UTF-8)
     const char* desc;    // описание на игровом экране (UTF-8)
     std::function<std::pair<int,int>(int)> numRange;
-    bool showPowers;     // показывать степени двойки над двоичными ячейками (игры 10 → 2 и 2 → 10)
+    bool showPowers;     // показывать веса разрядов НАД ЗАДАНИЕМ (строкой числа)
+                         // (игра 2 → 10: 64 32 16 8 4 2 1 / 128 ... 1 — над двоичным числом)
+    bool showPowersGrid; // показывать веса разрядов над сеткой ячеек ввода
+                         // (игра 10 → 2: 128 64 32 16 8 4 2 1 над двоичными кнопками)
 };
 
 inline std::vector<GameConfig> games() {
     std::vector<GameConfig> g;
     g.push_back({1, 8, 2, 2, 9, 10, 31, 2, "8 \xE2\x86\x92 2",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 8 \xD0\xA1.\xD0\xA1. \xD0\xB2 2 \xD0\xA1.\xD0\xA1.",
-        [](int){ return std::make_pair(64, 511); }, false});
+        [](int){ return std::make_pair(64, 511); }, false, false});
     g.push_back({2, 16, 2, 2, 12, 10, 35, 1, "16 \xE2\x86\x92 2",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 16 \xD0\xA1.\xD0\xA1. \xD0\xB2 2 \xD0\xA1.\xD0\xA1.",
-        [](int){ return std::make_pair(256, 4095); }, false});
+        [](int){ return std::make_pair(256, 4095); }, false, false});
     g.push_back({3, 2, 8, 8, 3, 10, 35, 2, "2 \xE2\x86\x92 8",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 2 \xD0\xA1.\xD0\xA1. \xD0\xB2 8 \xD0\xA1.\xD0\xA1.",
-        [](int lev){ return lev >= 7 ? std::make_pair(513, 4095) : std::make_pair(64, 511); }, false});
+        [](int lev){ return lev >= 7 ? std::make_pair(513, 4095) : std::make_pair(64, 511); }, false, false});
     g.push_back({4, 2, 16, 16, 3, 10, 35, 2, "2 \xE2\x86\x92 16",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 2 \xD0\xA1.\xD0\xA1. \xD0\xB2 16 \xD0\xA1.\xD0\xA1.",
-        [](int lev){ return lev >= 7 ? std::make_pair(4097, 65534) : std::make_pair(256, 4095); }, false});
+        [](int lev){ return lev >= 7 ? std::make_pair(4097, 65534) : std::make_pair(256, 4095); }, false, false});
     g.push_back({5, 10, 2, 2, 8, 13, 31, 1, "10 \xE2\x86\x92 2",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 10 \xD0\xA1.\xD0\xA1. \xD0\xB2 2 \xD0\xA1.\xD0\xA1.",
-        [](int){ return std::make_pair(1, 255); }, true});
+        [](int){ return std::make_pair(1, 255); }, false, true});
     g.push_back({6, 2, 10, 10, 2, 10, 35, 2, "2 \xE2\x86\x92 10",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 2 \xD0\xA1.\xD0\xA1. \xD0\xB2 10 \xD0\xA1.\xD0\xA1.",
-        [](int lev){ return lev == 1 ? std::make_pair(1, 9) : std::make_pair(10, 99); }, true});
+        [](int lev){ return lev == 1 ? std::make_pair(1, 9) : std::make_pair(10, 99); }, true, false});
     return g;
 }
 
@@ -140,16 +143,42 @@ public:
         return toBase(value10, cfg->fromBase);
     }
 
-    // Для режима 2 → 10: значение, которое игрок набирает двоичными ячейками
-    // (по умолчанию 0). Остальные режимы возвращают -1 (не используется).
-    long enteredValue() const {
-        if (!cfg || cfg->id != 6) return -1;
+    // Режим 10 → 2: десятичное значение, которое игрок набирает двоичными
+    // ячейками ввода. Возвращается пустая строка, пока ни одна ячейка не
+    // заполнена (все "0" по умолчанию) — чтобы нуль не путал игрока.
+    std::string enteredValueText() const {
+        if (!cfg || cfg->id != 5) return "";
+        bool any = false;
+        for (int i = 0; i < digits; ++i)
+            if (digitValue(cells[i]) > 0) { any = true; break; }
+        if (!any) return "";
         long v = 0;
         for (int i = 0; i < digits; ++i) {
             int d = digitValue(cells[i]);
             v = v * 2 + (d > 0 ? 1 : 0);
         }
-        return v;
+        char buf[32]; snprintf(buf, sizeof buf, "%ld", v);
+        return buf;
+    }
+
+    // Режим 2 → 10: веса разрядов (степени двойки) НАД ЗАДАНИЕМ — над
+    // показанным двоичным числом, ровно по числу его цифр (без пробелов):
+    // уровень 1-6: "64 32 16 8 4 2 1", уровень 7+: "128 ... 1".
+    std::string taskWeightsText() const {
+        if (!cfg || !cfg->showPowers) return "";
+        std::string digitsStr;
+        for (char c : numberText())
+            if (c == '0' || c == '1') digitsStr += c;
+        int n = (int)digitsStr.size();
+        if (n == 0) return "";
+        std::string out;
+        for (int i = 0; i < n; ++i) {
+            long w = 1L << (n - 1 - i);
+            char buf[16]; snprintf(buf, sizeof buf, "%ld", w);
+            if (i) out += " ";
+            out += buf;
+        }
+        return out;
     }
 
     std::string expected() const {   // правильный ответ

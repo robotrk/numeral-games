@@ -18,7 +18,7 @@ struct GameConfig {
     std::string desc;
     // диапазон значения в десятичной системе для уровня lev (включительно mn..mx)
     std::function<std::pair<int,int>(int)> numRange;
-    bool showPowers;  // показывать степени двойки над ячейками (как в игре 5 веб-версии)
+    bool showPowers;  // показывать веса разрядов над сеткой ячеек ввода (игра 10 -> 2)
 };
 
 inline std::vector<GameConfig> makeGames() {
@@ -49,7 +49,7 @@ inline std::vector<GameConfig> makeGames() {
     g.push_back({6, 2, 10, 10, 2, 10, 35, 2,
         "Переведи число из 2 С.С. в 10 С.С.",
         [](int lev){ return lev == 1 ? std::make_pair(1, 9)
-                                     : std::make_pair(10, 99); }, true});
+                                     : std::make_pair(10, 99); }, false});
 
     return g;
 }

@@ -74,8 +74,12 @@ std::string Game::shownNumber() const {
     return toBase(value10_, cfg_.fromBase);
 }
 
-long Game::enteredValue() const {   // режим 2->10: что набрал игрок (по умолчанию 0)
-    if (cfg_.id != 6) return -1;
+long Game::enteredValue() const {   // режим 10->2: десятичное значение, набранное игроком
+    if (cfg_.id != 5) return -1;
+    bool any = false;
+    for (int i = 0; i < digits_; ++i)
+        if (cells_[i].v > '0') { any = true; break; }
+    if (!any) return -1;            // ничего не набрано — поле справа пустое
     long v = 0;
     for (int i = 0; i < digits_; ++i)
         v = v * 2 + (cells_[i].v > '0' ? 1 : 0);
@@ -125,11 +129,11 @@ void Game::render(const std::string& status) {
     os << "  Число:  \x1b[1;36m" << shownNumber() << "\x1b[0m"
        << "  (" << cfg_.fromBase << " С.С.)  ->  ответ в "
        << cfg_.toBase << " С.С.";
-    if (cfg_.id == 6)
-       os << "   = у вас получилось: " << std::max(0L, enteredValue());
+    if (cfg_.id == 5 && enteredValue() >= 0)
+       os << "   = у вас получилось: " << enteredValue();
     os << "\n\n";
 
-    if (cfg_.showPowers) {   // степени двойки над двоичным полем (игры 10->2 и 2->10)
+    if (cfg_.showPowers) {   // веса разрядов над двоичным полем ввода (игра 10->2)
         os << "          ";
         for (int i = digits_ - 1; i >= 0; --i) {
             os.width(4);

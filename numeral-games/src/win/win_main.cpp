@@ -197,7 +197,7 @@ static void layoutGame(App& app, float W, float H) {
     float totalW = n * app.cellSize + (n - 1) * app.cellGap;
     app.gridStartX = (W - totalW) / 2;
     app.gridTop = 48 + 34 + 64 + 18;   // панель + описание + строка числа (+степени)
-    if (app.eng.cfg && app.eng.cfg->showPowers) app.gridTop += 22;
+    if (app.eng.cfg && app.eng.cfg->showPowersGrid) app.gridTop += 22;
     (void)H;
 }
 
@@ -259,26 +259,51 @@ static void renderGame(App& app, Graphics& g, float W, float H, float alpha) {
     }
     float arrowW = 60;
     float cx = W / 2;
-    RectF numR(cx - bound.Width / 2 - arrowW / 2 + 14, lineY, bound.Width, 40);
+    // строка задания сдвинута влево, чтобы справа осталось место под
+    // живое десятичное значение игрока (режим 10 -> 2)
+    const float lineShift = -40.f;
+    float numX = cx - bound.Width / 2 - arrowW / 2 + 14 + lineShift;
+    RectF numR(numX, lineY, bound.Width, 40);
+    // веса разрядов НАД ЗАДАНИЕМ (режим 2 -> 10): выровнены по цифрам числа
+    if (e.cfg->showPowers) {
+        int nd = 0;
+        for (wchar_t c : num) if (c == L'0' || c == L'1') ++nd;
+        if (nd > 0) {
+                    float digitW = bound.Width / (float)num.size();
+            for (int i = 0; i < nd; ++i) {
+                long wgt = 1L << (nd - 1 - i);
+                wchar_t wb[16]; swprintf(wb, 16, L"%ld", wgt);
+                float cellCx = numX + (i + 0.5f) * digitW;
+                RectF wr(cellCx - digitW * 1.6f, lineY - 20, digitW * 3.2f, 18);
+                drawText(g, wb, wr, &pwFont, ca(COL_MUTED));
+            }
+        }
+    }
     drawText(g, num, numR, F->number, ca(COL_NUM));
     swprintf(buf, 64, L"%d", e.cfg->fromBase);
     drawText(g, buf, RectF(numR.X - 40, lineY + 8, 24, 28), F->basemark, ca(COL_PRIMARY));
-    drawText(g, L"\x2192", RectF(cx - arrowW / 2 + bound.Width / 2 + 10, lineY, arrowW, 40), F->basemark, ca(COL_PRIMARY));
+    drawText(g, L"\x2192", RectF(cx - arrowW / 2 + bound.Width / 2 + 10 + lineShift, lineY, arrowW, 40), F->basemark, ca(COL_PRIMARY));
     swprintf(buf, 64, L"%d", e.cfg->toBase);
-    drawText(g, buf, RectF(cx + bound.Width / 2 + arrowW / 2 + 16, lineY + 8, 24, 28), F->basemark, ca(COL_PRIMARY));
-    // режим 2 -> 10: показываем, что получилось у пользователя (= 0 по умолчанию)
-    if (e.cfg->id == 6) {
-        long ev = e.enteredValue();
-        wchar_t eb[32]; swprintf(eb, 32, L"= %ld", ev < 0 ? 0 : ev);
-        drawText(g, eb, RectF(cx + bound.Width / 2 + arrowW / 2 + 46, lineY, 120, 40),
-                 F->number, ca(COL_NUM), AHLeft);
+    float rightEdge = cx + bound.Width / 2 + arrowW / 2 + 16 + lineShift + 24;
+    drawText(g, buf, RectF(rightEdge - 24, lineY + 8, 24, 28), F->basemark, ca(COL_PRIMARY));
+    // режим 10 -> 2: справа от задания показываем десятичное значение, которое
+    // игрок набирает двоичными ячейками. Пока ничего не набрано — пусто,
+    // чтобы нуль по умолчанию не путал игрока.
+    if (e.cfg->id == 5) {
+        std::wstring ev = u8to16(e.enteredValueText());
+        if (!ev.empty()) {
+            drawText(g, L"=", RectF(rightEdge + 18, lineY, 20, 40),
+                     F->basemark, ca(COL_PRIMARY), AHLeft);
+            drawText(g, ev, RectF(rightEdge + 44, lineY, 120, 40),
+                     F->number, ca(COL_NUM), AHLeft);
+        }
     }
 
-    // --- степени двойки (игры 10->2 и 2->10, двоичное поле) ---
+    // --- веса разрядов над сеткой ячеек (игра 10->2: 128 64 ... 1) ---
     int n = e.digits;
     float cs = app.cellSize, gap = app.cellGap;
     float top = app.gridTop;
-    if (e.cfg->showPowers) {
+    if (e.cfg->showPowersGrid) {
         for (int i = 0; i < n; ++i) {
             long p = 1L << (n - 1 - i);
             swprintf(buf, 64, L"%ld", p);

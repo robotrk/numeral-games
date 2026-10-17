@@ -34,6 +34,6 @@ private:
     int  checkState() const;          // 0 = неполно, 1 = верно, 2 = ошибка
     std::string expected() const;
     std::string shownNumber() const;  // число с группировкой бит для игр 3/4
-    long enteredValue() const;        // режим 2->10: значение набранного двоичного числа
+    long enteredValue() const;        // режим 10->2: десятичное значение, набранное игроком (-1 если пусто)
     void cycleCell(int idx, int delta);
 };

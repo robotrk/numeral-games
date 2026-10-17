@@ -18,7 +18,9 @@ struct AppState {
     GtkWidget* lblTimer    = nullptr;
     GtkWidget* lblDesc     = nullptr;
     GtkWidget* lblNumber   = nullptr;  // исходное число
-    GtkWidget* lblEntered  = nullptr;  // режим 2 -> 10: значение, набранное игроком
+    GtkWidget* lblWeights  = nullptr;  // режим 2 -> 10: веса разрядов над заданием
+    GtkWidget* lblEntered  = nullptr;  // режим 10 -> 2: значение, набранное игроком
+    std::string lastNumberShown;       // чтобы не пересобирать строку каждый тик
     GtkWidget* cellsGrid   = nullptr;
     GtkWidget* lblState    = nullptr;
     GtkWidget* progressBar = nullptr;
@@ -132,14 +134,49 @@ static void refreshCellStyles(AppState& st) {
 static void syncCellsFromEngine(AppState& st) {
     for (size_t i = 0; i < st.cells.size() && i < st.eng.cells.size(); ++i)
         gtk_label_set_text(GTK_LABEL(st.cells[i]), st.eng.cells[i].c_str());
-    // режим 2 -> 10: показываем, что получилось у пользователя (по умолчанию 0)
+    // режим 10 -> 2: справа от задания показываем десятичное значение,
+    // которое игрок набирает двоичными ячейками. Пока ничего не набрано —
+    // строка пустая (нуль по умолчанию путает игрока).
     if (st.lblEntered) {
-        long v = st.eng.enteredValue();
-        if (v >= 0) {
-            char buf[32]; snprintf(buf, sizeof buf, "%ld", v);
-            gtk_label_set_text(GTK_LABEL(st.lblEntered), buf);
-        }
+        std::string v = st.eng.enteredValueText();
+        gtk_label_set_text(GTK_LABEL(st.lblEntered), v.c_str());
+        gtk_widget_set_opacity(st.lblEntered, v.empty() ? 0.0 : 1.0);
     }
+}
+
+// Обновление строки задания: число + веса разрядов над ним (2 -> 10)
+// + живое значение игрока (10 -> 2). Вызывается при старте уровня.
+static void refreshNumberLine(AppState& st) {
+    std::string num = st.eng.numberText();
+    st.lastNumberShown = num;
+    if (st.lblNumber) gtk_label_set_text(GTK_LABEL(st.lblNumber), num.c_str());
+
+    // веса разрядов НАД ЗАДАНИЕМ (режим 2 -> 10): пересобираем разметку,
+    // чтобы ширина букв совпала с шириной цифр числа
+    if (st.lblWeights) {
+        GList* kids = gtk_container_get_children(GTK_CONTAINER(st.lblWeights));
+        for (GList* l = kids; l; l = l->next) gtk_widget_destroy(GTK_WIDGET(l->data));
+        g_list_free(kids);
+        GtkWidget* w = st.lblWeights;
+        const char* mono = "monospace";
+        PangoAttrList* attrs = pango_attr_list_new();
+        pango_attr_list_insert(attrs, pango_attr_family_new(mono));
+        pango_attr_list_insert(attrs, pango_attr_size_new(13 * PANGO_SCALE));
+        pango_attr_list_insert(attrs, pango_attr_weight_new(PANGO_WEIGHT_NORMAL));
+        pango_attr_list_insert(attrs, pango_attr_foreground_new(0x6474, 0x8b8b, 0x9c9c));
+        int n = 0;
+        for (char c : num) if (c == '0' || c == '1') ++n;
+        for (int i = 0; i < n; ++i) {
+            long weight = 1L << (n - 1 - i);
+            char buf[16]; snprintf(buf, sizeof buf, "%ld", weight);
+            GtkWidget* l = gtk_label_new(buf);
+            gtk_label_set_attributes(GTK_LABEL(l), attrs);
+            gtk_box_pack_start(GTK_BOX(w), l, FALSE, FALSE, 0);
+        }
+        pango_attr_list_unref(attrs);
+        gtk_widget_show_all(w);
+    }
+    syncCellsFromEngine(st);
 }
 
 // ===================== ТИКЕР =====================
@@ -185,7 +222,7 @@ static gboolean onTick(gpointer data) {
     char buf[16];
     snprintf(buf, sizeof buf, "%d", st.eng.level);
     if (st.lblLevel)  gtk_label_set_text(GTK_LABEL(st.lblLevel), buf);
-    if (st.lblNumber) gtk_label_set_text(GTK_LABEL(st.lblNumber), st.eng.numberText().c_str());
+    if (st.eng.numberText() != st.lastNumberShown) refreshNumberLine(st);
     syncCellsFromEngine(st);
     refreshCellStyles(st);
     updateTimerLabel(st);
@@ -279,7 +316,7 @@ static void buildCellsGrid(AppState& st) {
     gtk_widget_set_halign(st.cellsGrid, GTK_ALIGN_CENTER);
 
     int row = 0;
-    if (st.eng.cfg->showPowers) {   // степени двойки (игры 10 -> 2 и 2 -> 10, двоичное поле)
+    if (st.eng.cfg->showPowersGrid) {   // веса разрядов над сеткой (игра 10 -> 2: 128..1)
         for (int i = 0; i < st.eng.digits; ++i) {
             long p = 1L << (st.eng.digits - 1 - i);
             char buf[16]; snprintf(buf, sizeof buf, "%ld", p);
@@ -339,7 +376,14 @@ static void rebuildGameView(AppState& st) {
     gtk_style_context_add_class(gtk_widget_get_style_context(st.lblDesc), "desc");
     gtk_box_pack_start(GTK_BOX(st.gameBox), st.lblDesc, FALSE, FALSE, 4);
 
-    // 2 — строка «число → система»
+    // 2 — строка «число → система»; над числом — веса разрядов (режим 2 -> 10)
+    GtkWidget* numCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_set_halign(numCol, GTK_ALIGN_CENTER);
+    st.lblWeights = nullptr;
+    if (st.eng.cfg && st.eng.cfg->showPowers) {   // только игра 2 -> 10
+        st.lblWeights = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+        gtk_box_pack_start(GTK_BOX(numCol), st.lblWeights, FALSE, FALSE, 0);
+    }
     GtkWidget* numLine = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_widget_set_halign(numLine, GTK_ALIGN_CENTER);
     char sub[96];
@@ -357,17 +401,20 @@ static void rebuildGameView(AppState& st) {
     gtk_box_pack_start(GTK_BOX(numLine), st.lblNumber, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(numLine), arr, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(numLine), l2, FALSE, FALSE, 0);
-    // режим 2 -> 10: после стрелки показываем, что получилось у пользователя (= 0 по умолчанию)
+    // режим 10 -> 2: после стрелки показываем десятичное значение, которое
+    // игрок набирает двоичными ячейками. Пусто, пока ничего не набрано.
     st.lblEntered = nullptr;
-    if (st.eng.cfg && st.eng.cfg->id == 6) {
+    if (st.eng.cfg && st.eng.cfg->id == 5) {
         GtkWidget* eq = gtk_label_new("=");
         gtk_style_context_add_class(gtk_widget_get_style_context(eq), "basemark");
-        st.lblEntered = gtk_label_new("0");
+        st.lblEntered = gtk_label_new("");
         gtk_style_context_add_class(gtk_widget_get_style_context(st.lblEntered), "number");
+        gtk_widget_set_opacity(st.lblEntered, 0.0);
         gtk_box_pack_start(GTK_BOX(numLine), eq, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(numLine), st.lblEntered, FALSE, FALSE, 0);
     }
-    gtk_box_pack_start(GTK_BOX(st.gameBox), numLine, FALSE, FALSE, 6);
+    gtk_box_pack_start(GTK_BOX(numCol), numLine, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(st.gameBox), numCol, FALSE, FALSE, 6);
 
     // 3 — placeholder под сетку ячеек (buildCellsGrid вставит её на это место)
     GtkWidget* placeholder = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -404,7 +451,7 @@ static void startGame(GtkButton* b, gpointer data) {
     buildCellsGrid(st);
     refreshCellStyles(st);
     updateTimerLabel(st);
-    gtk_label_set_text(GTK_LABEL(st.lblNumber), st.eng.numberText().c_str());
+    refreshNumberLine(st);
     gtk_stack_set_visible_child_name(GTK_STACK(st.stack), "game");
 }
 
