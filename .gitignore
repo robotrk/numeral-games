@@ -1,0 +1,9 @@
+build/
+release/
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
