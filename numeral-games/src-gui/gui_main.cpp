@@ -21,6 +21,7 @@ struct AppState {
     GtkWidget* lblWeights  = nullptr;  // режим 2 -> 10: веса разрядов над заданием
     GtkWidget* lblEntered  = nullptr;  // режим 10 -> 2: значение, набранное игроком
     std::string lastNumberShown;       // чтобы не пересобирать строку каждый тик
+    std::string lastEnteredShown;      // живое значение справа от задания
     GtkWidget* cellsGrid   = nullptr;
     GtkWidget* lblState    = nullptr;
     GtkWidget* progressBar = nullptr;
@@ -132,8 +133,11 @@ static void refreshCellStyles(AppState& st) {
 }
 
 static void syncCellsFromEngine(AppState& st) {
-    for (size_t i = 0; i < st.cells.size() && i < st.eng.cells.size(); ++i)
-        gtk_label_set_text(GTK_LABEL(st.cells[i]), st.eng.cells[i].c_str());
+    for (size_t i = 0; i < st.cells.size() && i < st.eng.cells.size(); ++i) {
+        // пустая ячейка (игра 2 -> 10) показывается как «_»
+        const char* txt = st.eng.cells[i].empty() ? "_" : st.eng.cells[i].c_str();
+        gtk_label_set_text(GTK_LABEL(st.cells[i]), txt);
+    }
     // режим 10 -> 2: справа от задания показываем десятичное значение,
     // которое игрок набирает двоичными ячейками. Пока ничего не набрано —
     // строка пустая (нуль по умолчанию путает игрока).
@@ -141,6 +145,7 @@ static void syncCellsFromEngine(AppState& st) {
         std::string v = st.eng.enteredValueText();
         gtk_label_set_text(GTK_LABEL(st.lblEntered), v.c_str());
         gtk_widget_set_opacity(st.lblEntered, v.empty() ? 0.0 : 1.0);
+        st.lastEnteredShown = v;
     }
 }
 
@@ -222,7 +227,8 @@ static gboolean onTick(gpointer data) {
     char buf[16];
     snprintf(buf, sizeof buf, "%d", st.eng.level);
     if (st.lblLevel)  gtk_label_set_text(GTK_LABEL(st.lblLevel), buf);
-    if (st.eng.numberText() != st.lastNumberShown) refreshNumberLine(st);
+    if (st.eng.numberText() != st.lastNumberShown ||
+        st.eng.enteredValueText() != st.lastEnteredShown) refreshNumberLine(st);
     syncCellsFromEngine(st);
     refreshCellStyles(st);
     updateTimerLabel(st);
@@ -329,7 +335,9 @@ static void buildCellsGrid(AppState& st) {
 
     for (int i = 0; i < st.eng.digits; ++i) {
         GtkWidget* ev = gtk_event_box_new();
-        GtkWidget* lbl = gtk_label_new(st.eng.cells[i].c_str());
+        // пустая ячейка (игра 2 -> 10, старт уровня) показывается как «_»
+        const char* txt = st.eng.cells[i].empty() ? "_" : st.eng.cells[i].c_str();
+        GtkWidget* lbl = gtk_label_new(txt);
         gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "cell");
         gtk_widget_set_size_request(lbl, 46, 46);
         gtk_container_add(GTK_CONTAINER(ev), lbl);

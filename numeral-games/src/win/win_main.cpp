@@ -320,7 +320,9 @@ static void renderGame(App& app, Graphics& g, float W, float H, float alpha) {
         fillRR(g, cr, 8, ca(active ? COL_ACT_BG : COL_CELL_BG));
         Pen pen(active ? COL_ACT_BRD : COL_CELL_BRD, active ? 2.5f : 1.5f);
         strokeRR(g, cr, 8, pen);
-        drawText(g, u8to16(e.cells[i]), cr, F->cell, ca(COL_NUM));
+        // пустая ячейка (игра 2 -> 10) показывается как «_»
+        std::wstring cellTxt = e.cells[i].empty() ? L"_" : u8to16(e.cells[i]);
+        drawText(g, cellTxt, cr, F->cell, ca(COL_NUM));
     }
 
     // --- полоса времени ---
