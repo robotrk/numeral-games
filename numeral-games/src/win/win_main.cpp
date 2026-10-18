@@ -93,6 +93,12 @@ struct App {
 
     // геометрия игровой сетки (обновляется в layoutGame, используется в кликах)
     float gridTop = 0, gridStartX = 0;
+
+    // Кэш офскрин-бумага для WM_PAINT: пересоздаётся только при смене размера
+    // окна. В прежней версии Bitmap создавался/уничтожался на каждую из ~60
+    // отрисовок в секунду (аллокация буфера целиком каждый кадр).
+    Bitmap* offscreen = nullptr;
+    int offW = 0, offH = 0;
 };
 
 // ===================== ГЕОМЕТРИЧЕСКИЕ УТИЛИТЫ =====================
@@ -250,7 +256,7 @@ static void renderGame(App& app, Graphics& g, float W, float H, float alpha) {
 
     // --- строка «число → система» ---
     float lineY = 102;               // чуть ниже: освобождает место под веса разрядов
-    std::wstring num = u8to16(e.numberText());
+    std::wstring num = u8to16(e.numberTextCached());
     // измерим ширину числа
     RectF bound;
     {
@@ -438,7 +444,7 @@ static void handleKey(App& app, WPARAM vk) {
     }
 }
 
-// ===================== ТИКЕР (SetTimer 16 мс ≈ 60 fps) =====================
+// ===================== ТАЙМЕР / РЕНДЕР (SetTimer 16 мс ≈ 60 fps) =====================
 static void onFrameTimer(App& app) {
     ULONGLONG now = GetTickCount64();
     double dt = (now - app.lastTickMs) / 1000.0;
@@ -447,6 +453,8 @@ static void onFrameTimer(App& app) {
 
     bool wasInGame = app.eng.inGame;
     int prevLevel = app.eng.level;
+    auto prevStatus = app.eng.status;
+    double prevTimeLeft = app.eng.timeLeft;
     app.eng.tick(dt);
     if (app.eng.inGame && app.eng.level != prevLevel) {
         RECT rc; GetClientRect(app.hwnd, &rc);
@@ -454,21 +462,36 @@ static void onFrameTimer(App& app) {
     }
     (void)wasInGame;
 
+    // Флаг «нужен кадр»: перерисовка имеет смысл только когда что-то из
+    // этого изменилось — раньше окно инвалидировалось на каждом тике,
+    // включая простой в меню и после завершения игры (лишняя загрузка CPU/GPU).
+    bool needFrame = false;
+
     // плавный переход экранов
     double target = app.wantGameScreen ? 1.0 : 0.0;
     double speed = 4.0;                       // ~0.25 с на всю анимацию
-    if (app.screenAnim < target)      app.screenAnim = std::min(target, app.screenAnim + speed * dt);
-    else if (app.screenAnim > target) app.screenAnim = std::max(target, app.screenAnim - speed * dt);
+    if (app.screenAnim < target)      { app.screenAnim = std::min(target, app.screenAnim + speed * dt); needFrame = true; }
+    else if (app.screenAnim > target) { app.screenAnim = std::max(target, app.screenAnim - speed * dt); needFrame = true; }
 
     auto animBtn = [&](Button& b) {
         float t = (b.state == Button::Normal) ? 0.f : 1.f;
+        float prev = b.anim;
         b.anim += (t - b.anim) * (float)std::min(1.0, dt * 12.0);
+        if (std::fabs(b.anim - prev) > 0.001f) needFrame = true;
     };
     for (auto& b : app.menuButtons) animBtn(b);
     animBtn(app.backButton);
 
     updateHover(app);
-    InvalidateRect(app.hwnd, nullptr, FALSE);
+
+    // игровые данные: статус, уровень или видимое время (0.1 с) изменились
+    if (app.eng.inGame &&
+        (app.eng.status != prevStatus || app.eng.level != prevLevel ||
+         std::floor(std::max(0.0, prevTimeLeft) * 10.0) !=
+         std::floor(std::max(0.0, app.eng.timeLeft) * 10.0)))
+        needFrame = true;
+
+    if (needFrame) InvalidateRect(app.hwnd, nullptr, FALSE);
 }
 
 // ===================== WNDPROC =====================
@@ -529,19 +552,27 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
             RECT rc; GetClientRect(hwnd, &rc);
-            Bitmap bmp(rc.right, rc.bottom, PixelFormat32bppPARGB);
-            Graphics g(&bmp);
+            // Офскрин-бумага переиспользуется между кадрами (создаётся только
+            // при изменении размера окна) — экономит аллокацию ~60 раз/сек.
+            if (!app.offscreen || app.offW != rc.right || app.offH != rc.bottom) {
+                delete app.offscreen;
+                app.offscreen = new Bitmap(rc.right, rc.bottom, PixelFormat32bppPARGB);
+                app.offW = rc.right; app.offH = rc.bottom;
+            }
+            Graphics g(app.offscreen);
             g.SetSmoothingMode(SmoothingModeAntiAlias);
             g.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
             render(app, g, (float)rc.right, (float)rc.bottom);
             Graphics wnd(hdc);
-            wnd.DrawImage(&bmp, 0, 0);
+            wnd.DrawImage(app.offscreen, 0, 0);
             EndPaint(hwnd, &ps);
             needRedraw = false;
             return 0;
         }
         case WM_DESTROY:
             KillTimer(hwnd, 1);
+            delete app.offscreen;
+            app.offscreen = nullptr;
             PostQuitMessage(0);
             return 0;
     }

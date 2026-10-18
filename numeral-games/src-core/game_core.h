@@ -72,8 +72,10 @@ inline long rndLong(long a, long b) {           // [a, b] включительн
 inline std::string toBase(long v, int base) {
     if (v == 0) return "0";
     const char* digits = "0123456789ABCDEF";
+    // Собираем в обратном порядке и разворачиваем — без O(n^2) вставок в начало.
     std::string s;
-    while (v > 0) { s.insert(s.begin(), digits[v % base]); v /= base; }
+    while (v > 0) { s += digits[v % base]; v /= base; }
+    std::reverse(s.begin(), s.end());
     return s;
 }
 
@@ -83,12 +85,17 @@ inline std::string padStart(const std::string& s, size_t n) {
 }
 
 inline std::string groupBits(const std::string& bin, int size) {
+    // Результат заведомо длиннее исходной строки — резервируем место сразу
+    // и идём по одному проходу (без O(n^2) вставок в начало).
     std::string out;
+    out.reserve(bin.size() + bin.size() / size + 1);
     int cnt = 0;
-    for (int i = (int)bin.size() - 1; i >= 0; --i) {
-        out.insert(out.begin(), bin[i]);
-        if (++cnt % size == 0 && i > 0) out.insert(out.begin(), ' ');
+    for (auto it = bin.rbegin(); it != bin.rend(); ++it) {
+        if (cnt && cnt % size == 0) out += ' ';
+        out += *it;
+        ++cnt;
     }
+    std::reverse(out.begin(), out.end());
     return out;
 }
 
@@ -152,6 +159,17 @@ public:
         return toBase(value10, cfg->fromBase);
     }
 
+    // Строка задания с кэшем: значение меняется только при старте нового
+    // уровня, а UI запрашивает его несколько раз за тик — пересчитываем
+    // не чаще одного раза на уровень/число.
+    const std::string& numberTextCached() const {
+        if (numberCacheKey_ != value10) {
+            numberCache_ = numberText();
+            numberCacheKey_ = value10;
+        }
+        return numberCache_;
+    }
+
     // Живое значение, которое игрок набирает ячейками ответа
     // (показывается справа от задания, рядом со стрелкой):
     //  • режим 10 → 2: десятичное число, соответствующее набранной двоичной
@@ -189,15 +207,16 @@ public:
     // уровень 1-6: "64 32 16 8 4 2 1", уровень 7+: "128 ... 1".
     std::string taskWeightsText() const {
         if (!cfg || !cfg->showPowers) return "";
-        std::string digitsStr;
-        for (char c : numberText())
-            if (c == '0' || c == '1') digitsStr += c;
-        int n = (int)digitsStr.size();
+        const std::string& num = numberTextCached();
+        int n = 0;
+        for (char c : num) if (c == '0' || c == '1') ++n;
         if (n == 0) return "";
         std::string out;
+        out.reserve(n * 5);
+        char buf[16];
         for (int i = 0; i < n; ++i) {
             long w = 1L << (n - 1 - i);
-            char buf[16]; snprintf(buf, sizeof buf, "%ld", w);
+            snprintf(buf, sizeof buf, "%ld", w);
             if (i) out += " ";
             out += buf;
         }
@@ -210,12 +229,19 @@ public:
 
     // 0 — неполно, 1 — верно, 2 — есть ошибка
     int check() const {
+        // Эталонная строка меняется только вместе с числом уровня — кэшируем.
+        if (expectedCacheKey_ != value10 || expectedCacheDigits_ != digits) {
+            expectedCache_ = expected();
+            expectedCacheKey_ = value10;
+            expectedCacheDigits_ = digits;
+        }
         std::string stroka;
+        stroka.reserve(digits);
         for (int i = 0; i < digits; ++i) {
             if (cells[i].empty()) return 0;
             stroka += cells[i];
         }
-        return stroka == expected() ? 1 : 2;
+        return stroka == expectedCache_ ? 1 : 2;
     }
 
     // --- действия пользователя ---
@@ -293,10 +319,18 @@ private:
     std::vector<GameConfig> games_;
     bool gamesReady_ = false;
 
+    // Кэши строк, зависящих только от текущего числа уровня
+    mutable long numberCacheKey_ = -1;          // -1 — кэш невалиден
+    mutable std::string numberCache_;
+    mutable long expectedCacheKey_ = -1;
+    mutable int expectedCacheDigits_ = -1;
+    mutable std::string expectedCache_;
+
     void startLevel(int lev) {
         level = lev;
         timeFull = cfg->startTimer;
         timeLeft = cfg->startTimer - (lev - 1) * cfg->timerStep;
+        numberCacheKey_ = -1;   // новое число уровня — сбрасываем кэши строк
 
         if (cfg->digitsForLevel) {
             // Динамическое число ячеек ввода по уровням

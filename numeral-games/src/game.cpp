@@ -25,8 +25,10 @@ static long rndLong(long a, long b) { // [a, b] включительно
 static std::string toBase(long v, int base) {
     if (v == 0) return "0";
     const char* digits = "0123456789ABCDEF";
+    // Собираем в обратном порядке и разворачиваем — без O(n^2) вставок в начало.
     std::string s;
-    while (v > 0) { s.insert(s.begin(), digits[v % base]); v /= base; }
+    while (v > 0) { s += digits[v % base]; v /= base; }
+    std::reverse(s.begin(), s.end());
     return s;
 }
 
@@ -37,12 +39,17 @@ static std::string padStart(const std::string& s, size_t n) {
 
 // группировка бит пробелами с конца (как groupBits в JS-версии)
 static std::string groupBits(const std::string& bin, int size) {
+    // Результат заведомо длиннее исходной строки — резервируем место сразу
+    // и идём по одному проходу (без O(n^2) вставок в начало).
     std::string out;
+    out.reserve(bin.size() + bin.size() / size + 1);
     int cnt = 0;
-    for (int i = (int)bin.size() - 1; i >= 0; --i) {
-        out.insert(out.begin(), bin[i]);
-        if (++cnt % size == 0 && i > 0) out.insert(out.begin(), ' ');
+    for (auto it = bin.rbegin(); it != bin.rend(); ++it) {
+        if (cnt && cnt % size == 0) out += ' ';
+        out += *it;
+        ++cnt;
     }
+    std::reverse(out.begin(), out.end());
     return out;
 }
 
@@ -52,6 +59,8 @@ Game::Game(const GameConfig& cfg) : cfg_(cfg) {}
 void Game::startLevel(int lev) {
     level_ = lev;
     timer_ = cfg_.startTimer - (lev - 1) * cfg_.timerStep;
+    shownCacheKey_ = -1;   // новое число уровня — сбрасываем кэши строк
+    expectedCacheKey_ = -1;
 
     digits_ = cfg_.maxDigits;
     if (lev >= 7) {
@@ -69,9 +78,14 @@ void Game::startLevel(int lev) {
 }
 
 std::string Game::shownNumber() const {
-    if (cfg_.id == 3) return groupBits(toBase(value10_, 2), 3);
-    if (cfg_.id == 4) return groupBits(toBase(value10_, 2), 4);
-    return toBase(value10_, cfg_.fromBase);
+    // Кэш: строка задания меняется только вместе с загаданным числом уровня.
+    if (shownCacheKey_ != value10_) {
+        if (cfg_.id == 3)       shownCache_ = groupBits(toBase(value10_, 2), 3);
+        else if (cfg_.id == 4)  shownCache_ = groupBits(toBase(value10_, 2), 4);
+        else                    shownCache_ = toBase(value10_, cfg_.fromBase);
+        shownCacheKey_ = value10_;
+    }
+    return shownCache_;
 }
 
 long Game::enteredValue() const {   // режим 10->2: десятичное значение, набранное игроком
@@ -87,11 +101,18 @@ long Game::enteredValue() const {   // режим 10->2: десятичное з
 }
 
 std::string Game::expected() const {
-    return padStart(toBase(value10_, cfg_.toBase), digits_);
+    // Кэш эталонной строки: зависит только от числа уровня и числа разрядов.
+    if (expectedCacheKey_ != value10_ || expectedCacheDigits_ != digits_) {
+        expectedCache_ = padStart(toBase(value10_, cfg_.toBase), digits_);
+        expectedCacheKey_ = value10_;
+        expectedCacheDigits_ = digits_;
+    }
+    return expectedCache_;
 }
 
 int Game::checkState() const {
     std::string stroka;
+    stroka.reserve(cells_.size());
     for (auto& c : cells_) stroka += c.v;
     return stroka == expected() ? 1 : 2;
 }

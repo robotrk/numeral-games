@@ -28,6 +28,15 @@ private:
     bool finished_    = false; // все уровни пройдены
     std::chrono::steady_clock::time_point lastTick_{};
 
+    // Кэш строк, зависящих только от числа уровня: shownNumber()/expected()
+    // вызываются несколько раз за кадр/проверку — пересчитываем не чаще раза
+    // на уровень. -1 = кэш невалиден.
+    mutable long shownCacheKey_   = -1;
+    mutable std::string shownCache_;
+    mutable long expectedCacheKey_ = -1;
+    mutable int expectedCacheDigits_ = -1;
+    mutable std::string expectedCache_;
+
     void startLevel(int lev);
     void advanceLevel();              // переход на следующий уровень или победа
     void render(const std::string& status);

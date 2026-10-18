@@ -30,6 +30,8 @@ struct AppState {
     GtkWidget* lblEntered  = nullptr;  // режим 10 -> 2: значение, набранное игроком
     std::string lastNumberShown;       // чтобы не пересобирать строку каждый тик
     std::string lastEnteredShown;      // живое значение справа от задания
+    std::string lastStateText;         // текст строки состояния (не обновляем без изменения)
+    int lastCellsSig = -1;             // подпись содержимого ячеек (см. cellsSignature)
     GtkWidget* cellsGrid   = nullptr;
     GtkWidget* lblState    = nullptr;
     GtkWidget* progressBar = nullptr;
@@ -112,7 +114,13 @@ static void updateTimerLabel(AppState& st) {
     if (!st.lblTimer) return;
     char buf[32];
     snprintf(buf, sizeof buf, "%.1f", std::max(0.0, st.eng.timeLeft));
-    gtk_label_set_text(GTK_LABEL(st.lblTimer), buf);
+    // метку обновляем только когда отображаемое значение (0.1 с) изменилось —
+    // это отсеивает большинство перерисовок между тиками
+    static thread_local std::string lastShown;
+    if (lastShown != buf) {
+        lastShown = buf;
+        gtk_label_set_text(GTK_LABEL(st.lblTimer), buf);
+    }
 
     if (st.progressBar && st.eng.cfg) {
         double frac = std::clamp(st.eng.timeLeft / st.eng.timeFull, 0.0, 1.0);
@@ -140,6 +148,15 @@ static void refreshCellStyles(AppState& st) {
     }
 }
 
+// Компактная подпись содержимого ячеек: позволяет вызывающему коду
+// пропускать синхронизацию виджетов, когда набор цифр не менялся.
+static int cellsSignature(const AppState& st) {
+    int sig = st.eng.cursor * 131 + (int)st.eng.cells.size() * 7919;
+    for (const auto& c : st.eng.cells)
+        sig = sig * 33 + (c.empty() ? -1 : (unsigned char)c[0]);
+    return sig;
+}
+
 static void syncCellsFromEngine(AppState& st) {
     for (size_t i = 0; i < st.cells.size() && i < st.eng.cells.size(); ++i) {
         // пустая ячейка (игра 2 -> 10) показывается как «_»
@@ -155,6 +172,7 @@ static void syncCellsFromEngine(AppState& st) {
         gtk_widget_set_opacity(st.lblEntered, v.empty() ? 0.0 : 1.0);
         st.lastEnteredShown = v;
     }
+    st.lastCellsSig = cellsSignature(st);
 }
 
 // Обновление строки задания: число + веса разрядов над ним (2 -> 10)
@@ -209,36 +227,58 @@ static gboolean onTick(gpointer data) {
 
     switch (st.eng.status) {
         case GameEngine::Status::Idle:
-            setStateText(st, "", nullptr);
+            if (!st.lastStateText.empty()) {   // не трогаем виджет без изменения текста
+                st.lastStateText.clear();
+                setStateText(st, "", nullptr);
+            }
             break;
-        case GameEngine::Status::Wrong:
+        case GameEngine::Status::Wrong: {
             // ✖ Есть ошибка
-            setStateText(st, "\xE2\x9C\x96 \xD0\x95\xD1\x81\xD1\x82\xD1\x8C \xD0\xBE\xD1\x88\xD0\xB8\xD0\xB1\xD0\xBA\xD0\xB0", "bad");
+            static const std::string kWrong =
+                "\xE2\x9C\x96 \xD0\x95\xD1\x81\xD1\x82\xD1\x8C \xD0\xBE\xD1\x88\xD0\xB8\xD0\xB1\xD0\xBA\xD0\xB0";
+            if (st.lastStateText != kWrong) {
+                st.lastStateText = kWrong;
+                setStateText(st, kWrong, "bad");
+            }
             break;
-        case GameEngine::Status::NextWait:
+        }
+        case GameEngine::Status::NextWait: {
             // Все верно! N...
-            setStateText(st, "\xD0\x92\xD1\x81\xD0\xB5 \xD0\xB2\xD0\xB5\xD1\x80\xD0\xBD\xD0\xBE! " +
-                std::to_string(std::max(0, st.eng.waitCounter)) + "...", "ok");
+            std::string t = "\xD0\x92\xD1\x81\xD0\xB5 \xD0\xB2\xD0\xB5\xD1\x80\xD0\xBD\xD0\xBE! " +
+                std::to_string(std::max(0, st.eng.waitCounter)) + "...";
+            if (st.lastStateText != t) { st.lastStateText = t; setStateText(st, t, "ok"); }
             break;
-        case GameEngine::Status::TimeoutWait:
+        }
+        case GameEngine::Status::TimeoutWait: {
             // Время вышло :( N...
-            setStateText(st, "\xD0\x92\xD1\x80\xD0\xB5\xD0\xBC\xD1\x8F \xD0\xB2\xD1\x8B\xD1\x88\xD0\xBB\xD0\xBE :(" +
-                std::to_string(std::max(0, st.eng.waitCounter)) + "...", "bad");
+            std::string t = "\xD0\x92\xD1\x80\xD0\xB5\xD0\xBC\xD1\x8F \xD0\xB2\xD1\x8B\xD1\x88\xD0\xBB\xD0\xBE :(" +
+                std::to_string(std::max(0, st.eng.waitCounter)) + "...";
+            if (st.lastStateText != t) { st.lastStateText = t; setStateText(st, t, "bad"); }
             break;
-        case GameEngine::Status::Finished:
+        }
+        case GameEngine::Status::Finished: {
             // ИГРА ЗАВЕРШЕНА!
-            setStateText(st, "\xD0\x98\xD0\x93\xD0\xA0\xD0\x90 \xD0\x97\xD0\x90\xD0\x92\xD0\x95\xD0\xA0\xD0\xA8\xD0\x95\xD0\x9D\xD0\x90!", "ok");
+            static const std::string kFin =
+                "\xD0\x98\xD0\x93\xD0\xA0\xD0\x90 \xD0\x97\xD0\x90\xD0\x92\xD0\x95\xD0\xA0\xD0\xA8\xD0\x95\xD0\x9D\xD0\x90!";
+            if (st.lastStateText != kFin) {
+                st.lastStateText = kFin;
+                setStateText(st, kFin, "ok");
+            }
             break;
+        }
     }
 
     // уровень/число могли смениться — обновляем заголовок и ячейки
     char buf[16];
     snprintf(buf, sizeof buf, "%d", st.eng.level);
     if (st.lblLevel)  gtk_label_set_text(GTK_LABEL(st.lblLevel), buf);
-    if (st.eng.numberText() != st.lastNumberShown ||
+    if (st.eng.numberTextCached() != st.lastNumberShown ||
         st.eng.enteredValueText() != st.lastEnteredShown) refreshNumberLine(st);
-    syncCellsFromEngine(st);
-    refreshCellStyles(st);
+    // виджеты ячеек трогаем только когда набор цифр или курсор реально изменились
+    if (cellsSignature(st) != st.lastCellsSig) {
+        syncCellsFromEngine(st);
+        refreshCellStyles(st);
+    }
     updateTimerLabel(st);
     return G_SOURCE_CONTINUE;
 }
