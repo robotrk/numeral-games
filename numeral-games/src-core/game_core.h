@@ -161,13 +161,19 @@ public:
     // пустая строка — чтобы «0» не путало игрока.
     std::string enteredValueText() const {
         if (!cfg || (cfg->id != 5 && cfg->id != 6)) return "";
-        // режим 2 → 10: двоичное число из реально набранных ячеек
-        // (пустые ячейки и ведущие нули по умолчанию не считаются)
-        if (cfg->id == 6) return enteredBinaryText();
+        // состояние по умолчанию (все ячейки равны нулю) — пусто,
+        // чтобы не путать игрока
         bool any = false;
         for (int i = 0; i < digits; ++i)
             if (digitValue(cells[i]) > 0) { any = true; break; }
         if (!any) return "";
+        if (cfg->id == 6) {
+            // режим 2 → 10: двоичное число из набранного десятичного значения
+            long v = 0;
+            for (int i = 0; i < digits; ++i)
+                v = v * 10 + digitValue(cells[i]);
+            return toBase(v, 2);
+        }
         // режим 10 → 2: из набранной двоичной записи — десятичное значение
         long v = 0;
         for (int i = 0; i < digits; ++i) {
@@ -176,29 +182,6 @@ public:
         }
         char buf[32]; snprintf(buf, sizeof buf, "%ld", v);
         return buf;
-    }
-
-    bool cellEmpty(int i) const {             // ячейка не заполнена явно
-        return i >= 0 && i < digits && cells[i].empty();
-    }
-
-    // Режим 2 → 10: двоичное число из НАБРАННЫХ пользователем ячеек.
-    // Считаются только реально заполненные ячейки (пропускаются и ведущие
-    // нули по умолчанию, и незаполненные): «_ _» → "", «1 _» → "1",
-    // «1 2» → "1100" (12₁₀), «0 1 2» → "1100". Пока ничего не набрано —
-    // пустая строка, чтобы справа не путало игрока.
-    std::string enteredBinaryText() const {
-        if (!cfg || cfg->id != 6) return "";
-        std::string dec;
-        for (int i = 0; i < digits; ++i) {
-            if (cellEmpty(i)) continue;       // незаполненная ячейка
-            char ch = cells[i][0];
-            if (ch >= '0' && ch <= '9') dec += ch;
-        }
-        if (dec.empty()) return "";           // ячеек не касались
-        long v = strtol(dec.c_str(), nullptr, 10);
-        if (v <= 0) return "";                // набран ноль — тоже пусто
-        return toBase(v, 2);
     }
 
     // Режим 2 → 10: веса разрядов (степени двойки) НАД ЗАДАНИЕМ — над
@@ -250,12 +233,6 @@ public:
         int base = cfg->inputBase;
         // Пустая ячейка: клик/стрелки начинают набор с 1 или 0
         if (cells[idx].empty()) { cells[idx] = (delta > 0) ? "1" : "0"; return; }
-        // В игре 2 → 10 цикл «после 9» возвращает ячейку в пустое состояние —
-        // так игрок может стереть цифру и набрать число короче (например 7).
-        if (cfg->id == 6 && delta > 0 && digitValue(cells[idx]) == 9) {
-            cells[idx] = "";
-            return;
-        }
         int n = digitValue(cells[idx]);
         n = (n + delta + base) % base;
         cells[idx] = digitText(n, base);
@@ -337,8 +314,8 @@ private:
         // Игра 2 → 10: ячейки ответа стартуют ПУСТЫМИ (игрок сам набирает
         // десятичное число — пустые ячейки показываются как «_»); в остальных
         // режимах — «0» по умолчанию, как в веб-версии.
-        if (cfg->id == 6) cells.assign(digits, "");
-        else              cells.assign(digits, "0");
+        // во всех режимах ячейки по умолчанию показывают «0» (как в v1.02)
+        cells.assign(digits, "0");
 
         auto range = cfg->numRange(lev);
         value10 = rndLong(range.first, range.second);
