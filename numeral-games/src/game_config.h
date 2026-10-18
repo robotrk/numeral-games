@@ -46,9 +46,10 @@ inline std::vector<GameConfig> makeGames() {
         "Переведи число из 10 С.С. в 2 С.С.",
         [](int){ return std::make_pair(1, 255); }, true});
 
-    g.push_back({6, 2, 10, 10, 2, 10, 35, 2,
+    g.push_back({6, 2, 10, 10, 3, 10, 35, 2,
         "Переведи число из 2 С.С. в 10 С.С.",
         // Уровень 4: числа от 33 до 64 (по запросу); остальное — как раньше.
+        // Начиная с уровня 5 нужны 3 цифры ответа (числа > 99).
         [](int lev){ return lev == 4 ? std::make_pair(33, 64)
                           : lev == 1 ? std::make_pair(1, 9)
                                      : std::make_pair(10, 99); }, false});

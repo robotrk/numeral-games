@@ -22,7 +22,7 @@ struct GameConfig {
     int maxDigits, levelCount;
     double startTimer, timerStep;
     // Число ячеек ввода на уровне (если не задано — maxDigits с ростом на 7+ уровне).
-    // Игра 2 → 10: уровни 1-5 — 2 ячейки, уровни 6+ — 3 ячейки.
+    // Игра 2 → 10: уровни 1-4 — 2 ячейки, уровни 5+ — 3 ячейки.
     std::function<int(int)> digitsForLevel;
     const char* title;   // подпись кнопки в меню (UTF-8)
     const char* desc;    // описание на игровом экране (UTF-8)
@@ -50,7 +50,7 @@ inline std::vector<GameConfig> games() {
     g.push_back({5, 10, 2, 2, 8, 13, 31, 1, nullptr, "10 \xE2\x86\x92 2",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 10 \xD0\xA1.\xD0\xA1. \xD0\xB2 2 \xD0\xA1.\xD0\xA1.",
         [](int lev){ return lev <= 5 ? std::make_pair(17, 127) : std::make_pair(129, 255); }, false, true});
-    g.push_back({6, 2, 10, 10, 2, 10, 35, 2, [](int lev){ return lev <= 5 ? 2 : 3; }, "2 \xE2\x86\x92 10",
+    g.push_back({6, 2, 10, 10, 3, 10, 35, 2, [](int lev){ return lev <= 4 ? 2 : 3; }, "2 \xE2\x86\x92 10",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 2 \xD0\xA1.\xD0\xA1. \xD0\xB2 10 \xD0\xA1.\xD0\xA1.",
         [](int lev) {
             if (lev <= 2) return std::make_pair(8, 32);
@@ -335,7 +335,7 @@ private:
 
         if (cfg->digitsForLevel) {
             // Динамическое число ячеек ввода по уровням
-            // (игра 2 → 10: уровни 1-5 — 2 ячейки, уровни 6+ — 3 ячейки).
+            // (игра 2 → 10: уровни 1-4 — 2 ячейки, уровни 5+ — 3 ячейки).
             digits = cfg->digitsForLevel(lev);
         } else {
             digits = cfg->maxDigits;
