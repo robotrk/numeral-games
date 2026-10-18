@@ -1,1 +1,5 @@
-numeral-games/release/
+build/
+*.o
+*.exe
+.vscode/
+.idea/

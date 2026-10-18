@@ -4,6 +4,14 @@
 #include <gtk/gtk.h>
 
 #include "../src-core/game_core.h"
+// Иконка приложения, вшитая в бинарник (base64 PNG).
+// Файл resources/icon_data.h генерируется CMake-командой gen_icon_header.cmake
+// из numeral_games.png (или скриптом сборки вне CMake).
+#if __has_include("icon_data.h")
+#  include "icon_data.h"
+#else
+static const char ICON_PNG_BASE64[] = "";
+#endif
 
 using namespace core;
 
@@ -523,6 +531,19 @@ int main(int argc, char** argv) {
     gtk_window_set_title(GTK_WINDOW(st->window),
         "\xD0\x98\xD0\xB3\xD1\x80\xD1\x8B \xD0\xBF\xD0\xBE \xD1\x81\xD0\xB8\xD1\x81\xD1\x82\xD0\xB5\xD0\xBC\xD0\xB0\xD0\xBC "
         "\xD1\x81\xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xB5\xD0\xBD\xD0\xB8\xD1\x8F");
+    // Иконка окна (панель задач KDE/XFCE, alt+Tab): PNG вшит в бинарник
+    // как base64-строка (см. resources/icon_data.h, генерируется CMake/скриптом).
+    if (ICON_PNG_BASE64[0]) {
+        gsize olen = 0;
+        gchar* raw = reinterpret_cast<gchar*>(g_base64_decode(ICON_PNG_BASE64, &olen));
+        GdkPixbufLoader* loader = gdk_pixbuf_loader_new_with_type("png", nullptr);
+        gdk_pixbuf_loader_write(loader, (const guchar*)(const guint8*)raw, olen, nullptr);
+        gdk_pixbuf_loader_close(loader, nullptr);
+        GdkPixbuf* icon = gdk_pixbuf_loader_get_pixbuf(loader);
+        if (icon) gtk_window_set_icon(GTK_WINDOW(st->window), icon);
+        g_object_unref(loader);
+        g_free(raw);
+    }
     gtk_window_set_default_size(GTK_WINDOW(st->window), 900, 640);
     g_signal_connect(st->window, "destroy", G_CALLBACK(gtk_main_quit), nullptr);
 

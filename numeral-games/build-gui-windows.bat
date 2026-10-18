@@ -16,16 +16,22 @@ exit /b 1
 
 :msvc
 if not exist build mkdir build
+REM Копируем иконку рядом с .rc, чтобы относительный путь в ресурсе работал
+copy /Y numeral_games.ico src\win\numeral_games.ico >nul
+rc /nologo /fo build\app_res.res src\win\app.rc
+if errorlevel 1 exit /b 1
 cl /nologo /EHsc /std:c++17 /O2 /utf-8 /DUNICODE /D_UNICODE ^
    src\win\win_main.cpp ^
    /link /SUBSYSTEM:WINDOWS gdiplus.lib user32.lib gdi32.lib shell32.lib ^
+   build\app_res.res ^
    /OUT:build\numeral_games_gui.exe
 goto done
 
 :mingw
 if not exist build mkdir build
+x86_64-w64-mingw32-windres -I src/win -I . src/win/app.rc -O coff -o build/app_res.o 2>nul || windres -I src/win -I . src/win/app.rc -O coff -o build/app_res.o || (echo Не найден windres & exit /b 1)
 g++ -std=c++17 -O2 -mwindows -municode -DUNICODE -D_UNICODE -static ^
-    src/win/win_main.cpp ^
+    src/win/win_main.cpp build/app_res.o ^
     -lgdiplus -luser32 -lgdi32 -lshell32 ^
     -o build/numeral_games_gui.exe
 

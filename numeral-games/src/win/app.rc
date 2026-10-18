@@ -1,0 +1,6 @@
+// app.rc — ресурсы Windows для GUI-версии numeral_games.
+// Иконка exe (проводник, заголовок окна, панель задач).
+// ID 101 должен совпадать с MAKEINTRESOURCEW(101) в win_main.cpp.
+#include <winres.h>
+
+101 ICON "numeral_games.ico"

@@ -16,7 +16,23 @@ if ! pkg-config --exists gtk+-3.0; then
 fi
 
 mkdir -p build
-g++ -std=c++17 -O2 -Wall -o build/numeral_games_gui \
+
+# Иконка Linux: numeral_games.png -> base64-заголовок icon_data.h (вшивается в бинарник)
+if [ -f numeral_games.png ]; then
+    {
+        echo "// Автогенерация build-gui-linux.sh из numeral_games.png. Не редактировать вручную."
+        echo "#pragma once"
+        echo "static const char ICON_PNG_BASE64[] ="
+        base64 -w 960 numeral_games.png | sed 's/.*/    "&"/'
+        echo ";"
+    } > build/icon_data.h
+    INC="-Ibuild"
+else
+    echo "Внимание: numeral_games.png не найден — иконка окна использована не будет." >&2
+    INC=""
+fi
+
+g++ -std=c++17 -O2 -Wall $INC -o build/numeral_games_gui \
     src-gui/gui_main.cpp $(pkg-config --cflags --libs gtk+-3.0)
 
 echo

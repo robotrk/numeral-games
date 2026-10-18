@@ -549,6 +549,22 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 // ===================== MAIN =====================
+// Загрузка иконки из ресурсов exe (прикреплён через app.rc / CMake как IDI_APPICON).
+// Если ресурса нет — тихо используем стандартную иконку приложения.
+static HICON loadAppIcon(HINSTANCE hInst) {
+    if (hInst) {
+        HICON big = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(101), IMAGE_ICON,
+                                      GetSystemMetrics(SM_CXICON),  GetSystemMetrics(SM_CYICON),  0);
+        HICON small = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(101), IMAGE_ICON,
+                                        GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+        if (big || small) {
+            // Для WM_SETICON: большая — в заголовок окна, маленькая — на панель задач
+            return big ? big : small;
+        }
+    }
+    return LoadIcon(nullptr, IDI_APPLICATION);
+}
+
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow) {
     GdiplusStartupInput gsi;
     ULONG_PTR token;
@@ -556,13 +572,18 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, LPWSTR, int nCmdShow) {
 
     initFonts();
 
-    WNDCLASS wc{};
+    WNDCLASSEX wc{};
+    wc.cbSize = sizeof(WNDCLASSEX);
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInst;
+    wc.hIcon = loadAppIcon(hInst);          // иконка окна (заголовок + Alt+Tab)
+    wc.hIconSm = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(101), IMAGE_ICON,
+                                   GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0);
+    if (!wc.hIconSm) wc.hIconSm = wc.hIcon; // иконка панели задач / проводника
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hbrBackground = nullptr;
     wc.lpszClassName = L"NumeralGamesWindow";
-    RegisterClass(&wc);
+    RegisterClassEx(&wc);
 
     static App app;
     app.menuButtons.resize(games().size());
