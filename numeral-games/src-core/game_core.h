@@ -53,9 +53,10 @@ inline std::vector<GameConfig> games() {
     g.push_back({6, 2, 10, 10, 2, 10, 35, 2, [](int lev){ return lev <= 5 ? 2 : 3; }, "2 \xE2\x86\x92 10",
         "\xD0\x9D\xD1\x83\xD0\xB6\xD0\xBD\xD0\xBE \xD0\xBF\xD0\xB5\xD1\x80\xD0\xB5\xD0\xB2\xD0\xB5\xD1\x81\xD1\x82\xD0\xB8 \xD1\x87\xD0\xB8\xD1\x81\xD0\xBB\xD0\xBE \xD0\xB8\xD0\xB7 2 \xD0\xA1.\xD0\xA1. \xD0\xB2 10 \xD0\xA1.\xD0\xA1.",
         [](int lev) {
-            if (lev == 1) return std::make_pair(8, 16);
-            if (lev == 2) return std::make_pair(17, 32);
+            if (lev <= 2) return std::make_pair(8, 32);
             if (lev == 3) return std::make_pair(33, 64);
+            // Уровень 4: числа от 33 до 64 (по запросу).
+            if (lev == 4) return std::make_pair(33, 64);
             if (lev <= 5) return std::make_pair(65, 128);
             return std::make_pair(129, 511);
         }, true, false});

@@ -48,7 +48,9 @@ inline std::vector<GameConfig> makeGames() {
 
     g.push_back({6, 2, 10, 10, 2, 10, 35, 2,
         "Переведи число из 2 С.С. в 10 С.С.",
-        [](int lev){ return lev == 1 ? std::make_pair(1, 9)
+        // Уровень 4: числа от 33 до 64 (по запросу); остальное — как раньше.
+        [](int lev){ return lev == 4 ? std::make_pair(33, 64)
+                          : lev == 1 ? std::make_pair(1, 9)
                                      : std::make_pair(10, 99); }, false});
 
     return g;
