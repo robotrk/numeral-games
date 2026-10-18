@@ -321,7 +321,7 @@ static void renderGame(App& app, Graphics& g, float W, float H, float alpha) {
         Pen pen(active ? COL_ACT_BRD : COL_CELL_BRD, active ? 2.5f : 1.5f);
         strokeRR(g, cr, 8, pen);
         // пустая ячейка (игра 2 -> 10) показывается как «_»
-        std::wstring cellTxt = e.cells[i].empty() ? L"_" : u8to16(e.cells[i]);
+        std::wstring cellTxt = e.cells[i].empty() ? L"0" : u8to16(e.cells[i]);
         drawText(g, cellTxt, cr, F->cell, ca(COL_NUM));
     }
 

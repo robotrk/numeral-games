@@ -143,7 +143,7 @@ static void refreshCellStyles(AppState& st) {
 static void syncCellsFromEngine(AppState& st) {
     for (size_t i = 0; i < st.cells.size() && i < st.eng.cells.size(); ++i) {
         // пустая ячейка (игра 2 -> 10) показывается как «_»
-        const char* txt = st.eng.cells[i].empty() ? "_" : st.eng.cells[i].c_str();
+        const char* txt = st.eng.cells[i].empty() ? "0" : st.eng.cells[i].c_str();
         gtk_label_set_text(GTK_LABEL(st.cells[i]), txt);
     }
     // режим 10 -> 2: справа от задания показываем десятичное значение,
@@ -344,7 +344,7 @@ static void buildCellsGrid(AppState& st) {
     for (int i = 0; i < st.eng.digits; ++i) {
         GtkWidget* ev = gtk_event_box_new();
         // пустая ячейка (игра 2 -> 10, старт уровня) показывается как «_»
-        const char* txt = st.eng.cells[i].empty() ? "_" : st.eng.cells[i].c_str();
+        const char* txt = st.eng.cells[i].empty() ? "0" : st.eng.cells[i].c_str();
         GtkWidget* lbl = gtk_label_new(txt);
         gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "cell");
         gtk_widget_set_size_request(lbl, 46, 46);
